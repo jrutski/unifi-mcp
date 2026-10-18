@@ -2101,6 +2101,31 @@
         "title": "Detail[VpnServerModel]",
         "type": "object"
       },
+      "Detail_WireGuardPeerModel_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WireGuardPeerModel"
+          },
+          "render_hint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Hint"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "Detail[WireGuardPeerModel]",
+        "type": "object"
+      },
       "Detail_WlanModel_": {
         "additionalProperties": true,
         "properties": {
@@ -7007,6 +7032,46 @@
         "title": "Page[QosRuleModel]",
         "type": "object"
       },
+      "Page_RemoteVpnClientModel_": {
+        "additionalProperties": true,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RemoteVpnClientModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "render_hint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Hint"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[RemoteVpnClientModel]",
+        "type": "object"
+      },
       "Page_RfScanResultModel_": {
         "additionalProperties": true,
         "properties": {
@@ -7085,6 +7150,46 @@
           "items"
         ],
         "title": "Page[RouteModel]",
+        "type": "object"
+      },
+      "Page_SiteToSiteVpnModel_": {
+        "additionalProperties": true,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SiteToSiteVpnModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "render_hint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Hint"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[SiteToSiteVpnModel]",
         "type": "object"
       },
       "Page_SmartDetectionModel_": {
@@ -7405,6 +7510,46 @@
           "items"
         ],
         "title": "Page[VpnServerModel]",
+        "type": "object"
+      },
+      "Page_WireGuardPeerModel_": {
+        "additionalProperties": true,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WireGuardPeerModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "render_hint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Hint"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[WireGuardPeerModel]",
         "type": "object"
       },
       "Page_WlanModel_": {
@@ -7937,6 +8082,222 @@
         "title": "QosRuleModel",
         "type": "object"
       },
+      "RemoteVpnClientModel": {
+        "additionalProperties": true,
+        "properties": {
+          "connected_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected Since"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "online": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Online"
+          },
+          "public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key"
+          },
+          "remote_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Ip"
+          },
+          "remote_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Port"
+          },
+          "rx_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rx Bytes"
+          },
+          "rx_rate_bps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rx Rate Bps"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          },
+          "server_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "tunnel_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tunnel Ip"
+          },
+          "tx_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Bytes"
+          },
+          "tx_rate_bps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Rate Bps"
+          },
+          "uptime_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uptime Seconds"
+          },
+          "vpn_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vpn Type"
+          }
+        },
+        "title": "RemoteVpnClientModel",
+        "type": "object"
+      },
       "RfScanResultModel": {
         "additionalProperties": true,
         "properties": {
@@ -8079,6 +8440,93 @@
           "settings"
         ],
         "title": "SettingsBody",
+        "type": "object"
+      },
+      "SiteToSiteVpnModel": {
+        "additionalProperties": true,
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "peer_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peer Address"
+          },
+          "remote_site_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Site Id"
+          },
+          "remote_subnets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Subnets"
+          },
+          "vpn_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vpn Type"
+          }
+        },
+        "title": "SiteToSiteVpnModel",
         "type": "object"
       },
       "SmartDetectionModel": {
@@ -9453,6 +9901,93 @@
           }
         },
         "title": "VpnServerModel",
+        "type": "object"
+      },
+      "WireGuardPeerModel": {
+        "additionalProperties": true,
+        "properties": {
+          "allowed_ips": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Ips"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "interface_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface Ip"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "preshared_key_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preshared Key Enabled"
+          },
+          "public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          }
+        },
+        "title": "WireGuardPeerModel",
         "type": "object"
       },
       "WlanModel": {
@@ -19614,6 +20149,124 @@
         ]
       }
     },
+    "/v1/sites/{site_id}/remote-vpn-clients": {
+      "get": {
+        "operationId": "list_remote_vpn_clients_v1_sites__site_id__remote_vpn_clients_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Also return configured users who are not connected",
+            "in": "query",
+            "name": "include_offline",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also return configured users who are not connected",
+              "title": "Include Offline",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only users of this VPN server (_id)",
+            "in": "query",
+            "name": "server_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only users of this VPN server (_id)",
+              "title": "Server Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Controller UUID; omit to use default",
+            "in": "query",
+            "name": "controller",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Controller UUID; omit to use default",
+              "title": "Controller"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RemoteVpnClientModel_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Remote Vpn Clients",
+        "tags": [
+          "network/vpn"
+        ]
+      }
+    },
     "/v1/sites/{site_id}/rf-scan-results": {
       "get": {
         "operationId": "list_rf_scan_results_v1_sites__site_id__rf_scan_results_get",
@@ -20126,6 +20779,94 @@
         "summary": "Get Site Settings",
         "tags": [
           "network/system"
+        ]
+      }
+    },
+    "/v1/sites/{site_id}/site-to-site-vpns": {
+      "get": {
+        "operationId": "list_site_to_site_vpns_v1_sites__site_id__site_to_site_vpns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Controller UUID; omit to use default",
+            "in": "query",
+            "name": "controller",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Controller UUID; omit to use default",
+              "title": "Controller"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_SiteToSiteVpnModel_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Site To Site Vpns",
+        "tags": [
+          "network/vpn"
         ]
       }
     },
@@ -23279,6 +24020,181 @@
           }
         },
         "summary": "Get Vpn Server Details",
+        "tags": [
+          "network/vpn"
+        ]
+      }
+    },
+    "/v1/sites/{site_id}/wireguard-peers": {
+      "get": {
+        "operationId": "list_wireguard_peers_v1_sites__site_id__wireguard_peers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only peers of this VPN server (_id)",
+            "in": "query",
+            "name": "server_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only peers of this VPN server (_id)",
+              "title": "Server Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Controller UUID; omit to use default",
+            "in": "query",
+            "name": "controller",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Controller UUID; omit to use default",
+              "title": "Controller"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_WireGuardPeerModel_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Wireguard Peers",
+        "tags": [
+          "network/vpn"
+        ]
+      }
+    },
+    "/v1/sites/{site_id}/wireguard-peers/{peer_id}": {
+      "get": {
+        "operationId": "get_wireguard_peer_details_v1_sites__site_id__wireguard_peers__peer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "peer_id",
+            "required": true,
+            "schema": {
+              "title": "Peer Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Controller UUID; omit to use default",
+            "in": "query",
+            "name": "controller",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Controller UUID; omit to use default",
+              "title": "Controller"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detail_WireGuardPeerModel_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Wireguard Peer Details",
         "tags": [
           "network/vpn"
         ]

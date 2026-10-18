@@ -5,6 +5,9 @@ Mirrors the Strawberry types in
 
 - ``VpnClient`` — list_vpn_clients + get_vpn_client_details + create/update
 - ``VpnServer`` — server reads plus the focused alternate-address update
+- ``WireGuardPeer`` / ``RemoteVpnClient`` / ``SiteToSiteVpn`` — read-only
+  projections for WireGuard server peers, remote-access users with their live
+  connection state, and site-to-site tunnels
 
 Factory helpers:
 - ``from_controller``      — normalise the raw controller dict → VpnClient or VpnServer
@@ -17,6 +20,7 @@ Factory helpers:
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from ipaddress import IPv4Address
 from typing import Any, Dict, List, Optional
 
@@ -360,3 +364,156 @@ def to_controller_update(fields: Dict[str, Any]) -> Dict[str, Any]:
     if "type" in result:
         result["vpn_type"] = result.pop("type")
     return result
+
+
+# ---------------------------------------------------------------------------
+# WireGuard peers, remote-access VPN clients and site-to-site tunnels (read-only)
+# ---------------------------------------------------------------------------
+#
+# Field names verified against Network 10.6.106:
+# - peers:   GET v2 ``wireguard/users`` (one record per configured peer)
+# - clients: GET v2 ``vpn/users`` (the Client Devices "VPN" list; one record per
+#   peer/user with its live connection state)
+# - site-to-site: ``networkconf`` records with ``purpose == "site-vpn"``
+
+SITE_TO_SITE_VPN_PURPOSE = "site-vpn"
+
+
+def _read_only(description: str) -> Any:
+    return Field(default=None, description=description, json_schema_extra={"mutable": False})
+
+
+class WireGuardPeer(BaseModel):
+    """A peer (client) configured on a WireGuard remote-access VPN server."""
+
+    id: Optional[str] = _read_only("WireGuard peer _id; pass to unifi_get_wireguard_peer_details")
+    name: Optional[str] = _read_only("Peer name shown in the UniFi UI")
+    server_id: Optional[str] = _read_only("networkconf _id of the WireGuard VPN server this peer belongs to")
+    interface_ip: Optional[str] = _read_only("Tunnel IP address assigned to the peer")
+    allowed_ips: Optional[List[str]] = _read_only("Extra subnets routed to this peer (empty for a plain client)")
+    public_key: Optional[str] = _read_only("Peer's WireGuard public key (not a secret)")
+    preshared_key_enabled: Optional[bool] = _read_only(
+        "Whether a preshared key is configured; the key is never returned"
+    )
+
+
+class RemoteVpnClient(BaseModel):
+    """A remote-access VPN user with its live connection state."""
+
+    id: Optional[str] = _read_only("Controller connection identifier")
+    name: Optional[str] = _read_only("Peer/user name shown in the UniFi UI")
+    status: Optional[str] = _read_only("Connection status reported by the controller (online or offline)")
+    online: Optional[bool] = _read_only("True when status is online; null when the controller status is unknown")
+    vpn_type: Optional[str] = _read_only("VPN server type, e.g. wireguard-server or openvpn-server")
+    server_id: Optional[str] = _read_only("networkconf _id of the VPN server")
+    server_name: Optional[str] = _read_only("Name of the VPN server")
+    public_key: Optional[str] = _read_only("WireGuard public key; matches public_key in unifi_list_wireguard_peers")
+    tunnel_ip: Optional[str] = _read_only("IP address assigned inside the VPN tunnel")
+    remote_ip: Optional[str] = _read_only("Public address the client last connected from")
+    remote_port: Optional[int] = _read_only("Public source port the client last connected from")
+    country_code: Optional[str] = _read_only("Country of remote_ip as reported by the controller")
+    connected_since: Optional[str] = _read_only("Start of the current session (ISO 8601 UTC); null when offline")
+    last_seen: Optional[str] = _read_only("Last activity (ISO 8601 UTC)")
+    uptime_seconds: Optional[int] = _read_only("Current session length in seconds; null when offline")
+    rx_bytes: Optional[int] = _read_only("Bytes received from the client")
+    tx_bytes: Optional[int] = _read_only("Bytes sent to the client")
+    rx_rate_bps: Optional[float] = _read_only("Current receive rate in bytes per second")
+    tx_rate_bps: Optional[float] = _read_only("Current transmit rate in bytes per second")
+
+
+class SiteToSiteVpn(BaseModel):
+    """A site-to-site VPN tunnel configuration (networkconf purpose site-vpn)."""
+
+    id: Optional[str] = _read_only("networkconf _id of the tunnel")
+    name: Optional[str] = _read_only("Tunnel name")
+    enabled: Optional[bool] = _read_only("Whether the tunnel is enabled; null when the controller omits it")
+    vpn_type: Optional[str] = _read_only(
+        "Tunnel type: auto (IPsec VTI), ipsec-vpn, openvpn-vpn, wireguard-vpn, or an SD-WAN tunnel type"
+    )
+    peer_address: Optional[str] = _read_only("Remote peer address (IPsec peer IP or OpenVPN remote host)")
+    remote_subnets: Optional[List[str]] = _read_only("Remote subnets routed through the tunnel")
+    remote_site_id: Optional[str] = _read_only("Remote UniFi site id for controller-managed tunnels")
+
+
+def _optional_bool(value: Any) -> Optional[bool]:
+    return value if type(value) is bool else None
+
+
+def _optional_int(value: Any) -> Optional[int]:
+    return value if type(value) is int else None
+
+
+def _optional_number(value: Any) -> Optional[float]:
+    return float(value) if type(value) in (int, float) else None
+
+
+def _optional_str_list(value: Any) -> Optional[List[str]]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str) and value:
+        return [value]
+    return None
+
+
+def _epoch_iso(value: Any) -> Optional[str]:
+    if type(value) not in (int, float) or value <= 0:
+        return None
+    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+
+
+def wireguard_peer_from_controller(raw: Dict[str, Any]) -> WireGuardPeer:
+    """Project a v2 ``wireguard/users`` record without its preshared key."""
+    return WireGuardPeer(
+        id=raw.get("_id"),
+        name=raw.get("name"),
+        server_id=raw.get("network_id"),
+        interface_ip=raw.get("interface_ip"),
+        allowed_ips=_optional_str_list(raw.get("allowed_ips")),
+        public_key=raw.get("public_key"),
+        preshared_key_enabled=bool(raw.get("preshared_key")),
+    )
+
+
+def remote_vpn_client_from_controller(raw: Dict[str, Any]) -> RemoteVpnClient:
+    """Project a v2 ``vpn/users`` record.
+
+    The controller puts the WireGuard public key in ``name`` and the UI label in
+    ``display_name``; this projection names them for what they are.
+    """
+    status = raw.get("status")
+    vpn_type = raw.get("vpn_type")
+    is_wireguard = isinstance(vpn_type, str) and vpn_type.startswith("wireguard")
+    return RemoteVpnClient(
+        id=raw.get("id"),
+        name=raw.get("display_name") or (None if is_wireguard else raw.get("name")),
+        status=status,
+        online={"online": True, "offline": False}.get(status) if isinstance(status, str) else None,
+        vpn_type=vpn_type,
+        server_id=raw.get("network_id"),
+        server_name=raw.get("network_name"),
+        public_key=raw.get("name") if is_wireguard else None,
+        tunnel_ip=raw.get("ip"),
+        remote_ip=raw.get("remote_ip"),
+        remote_port=_optional_int(raw.get("remote_port")),
+        country_code=raw.get("country_code"),
+        connected_since=_epoch_iso(raw.get("assoc_time")),
+        last_seen=_epoch_iso(raw.get("last_seen")),
+        uptime_seconds=_optional_int(raw.get("uptime")),
+        rx_bytes=_optional_int(raw.get("rx_bytes")),
+        tx_bytes=_optional_int(raw.get("tx_bytes")),
+        rx_rate_bps=_optional_number(raw.get("rx_bytes-r")),
+        tx_rate_bps=_optional_number(raw.get("tx_bytes-r")),
+    )
+
+
+def site_to_site_vpn_from_controller(raw: Dict[str, Any]) -> SiteToSiteVpn:
+    """Project a ``networkconf`` site-to-site record without its secrets."""
+    return SiteToSiteVpn(
+        id=raw.get("_id"),
+        name=raw.get("name"),
+        enabled=_optional_bool(raw.get("enabled")),
+        vpn_type=raw.get("vpn_type"),
+        peer_address=raw.get("ipsec_peer_ip") or raw.get("openvpn_remote_host") or raw.get("openvpn_remote_address"),
+        remote_subnets=_optional_str_list(raw.get("remote_vpn_subnets")),
+        remote_site_id=raw.get("remote_site_id"),
+    )

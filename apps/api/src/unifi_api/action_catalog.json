@@ -5321,6 +5321,29 @@
       }
     },
     {
+      "name": "unifi_get_wireguard_peer_details",
+      "product": "network",
+      "category": "vpn",
+      "permission_action": "read",
+      "read_only_hint": true,
+      "auth_method": "local_only",
+      "manager_attr": "vpn_manager",
+      "manager_method": "get_wireguard_peer_details",
+      "input_schema": {
+        "properties": {
+          "peer_id": {
+            "description": "WireGuard peer id (from unifi_list_wireguard_peers)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "peer_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "unifi_get_wlan_details",
       "product": "network",
       "category": "network",
@@ -5887,6 +5910,30 @@
       }
     },
     {
+      "name": "unifi_list_remote_vpn_clients",
+      "product": "network",
+      "category": "vpn",
+      "permission_action": "read",
+      "read_only_hint": true,
+      "auth_method": "local_only",
+      "manager_attr": "vpn_manager",
+      "manager_method": "get_remote_vpn_clients",
+      "input_schema": {
+        "properties": {
+          "include_offline": {
+            "description": "When true, also returns configured VPN users who are not connected. Default false",
+            "type": "boolean"
+          },
+          "server_id": {
+            "description": "Optional VPN server _id (from unifi_list_vpn_servers) to list only that server's users",
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "unifi_list_rogue_aps",
       "product": "network",
       "category": "devices",
@@ -5938,6 +5985,21 @@
       "auth_method": "local_only",
       "manager_attr": "routing_manager",
       "manager_method": "get_routes",
+      "input_schema": {
+        "properties": {},
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unifi_list_site_to_site_vpns",
+      "product": "network",
+      "category": "vpn",
+      "permission_action": "read",
+      "read_only_hint": true,
+      "auth_method": "local_only",
+      "manager_attr": "vpn_manager",
+      "manager_method": "get_site_to_site_vpns",
       "input_schema": {
         "properties": {},
         "type": "object",
@@ -6035,6 +6097,26 @@
       "manager_method": "get_vpn_servers",
       "input_schema": {
         "properties": {},
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unifi_list_wireguard_peers",
+      "product": "network",
+      "category": "vpn",
+      "permission_action": "read",
+      "read_only_hint": true,
+      "auth_method": "local_only",
+      "manager_attr": "vpn_manager",
+      "manager_method": "get_wireguard_peers",
+      "input_schema": {
+        "properties": {
+          "server_id": {
+            "description": "Optional VPN server _id (from unifi_list_vpn_servers) to list only that server's peers",
+            "type": "string"
+          }
+        },
         "type": "object",
         "additionalProperties": false
       }

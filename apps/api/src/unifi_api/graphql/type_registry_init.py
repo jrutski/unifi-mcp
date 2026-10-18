@@ -231,10 +231,19 @@ from unifi_api.graphql.types.network.voucher import (
     Voucher as NetworkVoucherType,
 )
 from unifi_api.graphql.types.network.vpn import (
+    RemoteVpnClient as NetworkRemoteVpnClientType,
+)
+from unifi_api.graphql.types.network.vpn import (
+    SiteToSiteVpn as NetworkSiteToSiteVpnType,
+)
+from unifi_api.graphql.types.network.vpn import (
     VpnClient as NetworkVpnClientType,
 )
 from unifi_api.graphql.types.network.vpn import (
     VpnServer as NetworkVpnServerType,
+)
+from unifi_api.graphql.types.network.vpn import (
+    WireGuardPeer as NetworkWireGuardPeerType,
 )
 from unifi_api.graphql.types.network.wlan import (
     Wlan as NetworkWlanType,
@@ -393,6 +402,14 @@ def build_type_registry() -> TypeRegistry:
         NetworkVpnServerType,
         "detail",
     )
+    reg.register_tool_type("unifi_list_wireguard_peers", NetworkWireGuardPeerType, "list")
+    reg.register_tool_type(
+        "unifi_get_wireguard_peer_details",
+        NetworkWireGuardPeerType,
+        "detail",
+    )
+    reg.register_tool_type("unifi_list_remote_vpn_clients", NetworkRemoteVpnClientType, "list")
+    reg.register_tool_type("unifi_list_site_to_site_vpns", NetworkSiteToSiteVpnType, "list")
 
     # network/dns (tool-keyed only)
     reg.register_tool_type("unifi_list_dns_records", NetworkDnsRecordType, "list")

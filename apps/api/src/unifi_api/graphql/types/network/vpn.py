@@ -5,6 +5,12 @@ Phase 6 PR2 Task 21 migration target. Two read shapes that used to live in
 
 - ``VpnClient`` — list_vpn_clients + get_vpn_client_details
 - ``VpnServer`` — list_vpn_servers + get_vpn_server_details
+- ``WireGuardPeer`` — list_wireguard_peers + get_wireguard_peer_details
+- ``RemoteVpnClient`` — list_remote_vpn_clients (live connection state)
+- ``SiteToSiteVpn`` — list_site_to_site_vpns
+
+The last three project through the shared ``unifi_core`` models so the MCP
+tools and the API return the same fields.
 
 VPN configurations live inside the ``networkconf`` API and are filtered by
 purpose / vpn_type. The common fields surfaced here mirror the manager
@@ -22,7 +28,14 @@ from dataclasses import asdict
 from typing import Any
 
 import strawberry
-from unifi_core.network.models.vpn import ALTERNATE_ADDRESS_KEYS, alternate_address_view
+from unifi_core.network.models.vpn import (
+    ALTERNATE_ADDRESS_KEYS,
+    alternate_address_view,
+    remote_vpn_client_from_controller,
+    site_to_site_vpn_from_controller,
+    wireguard_peer_from_controller,
+)
+from unifi_core.redaction import redact_sensitive_fields
 
 
 def _get(obj: Any, key: str, default: Any = None) -> Any:
@@ -136,3 +149,106 @@ class VpnServer:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@strawberry.type(description="A peer configured on a WireGuard remote-access VPN server.")
+class WireGuardPeer:
+    id: strawberry.ID | None
+    name: str | None
+    server_id: str | None
+    interface_ip: str | None
+    allowed_ips: list[str] | None
+    public_key: str | None
+    preshared_key_enabled: bool | None
+
+    @classmethod
+    def render_hint(cls, kind: str) -> dict:
+        return {
+            "kind": kind,
+            "primary_key": "id",
+            "display_columns": ["name", "interface_ip", "allowed_ips", "server_id"],
+            "sort_default": "name:asc",
+        }
+
+    @classmethod
+    def from_manager_output(cls, obj: Any, *, redact_sensitive: bool = True) -> "WireGuardPeer":
+        # The projection never carries the preshared key itself; the boolean
+        # flag passes through the shared redactor like any other egress.
+        data = wireguard_peer_from_controller(_get_raw(obj)).model_dump()
+        return cls(**redact_sensitive_fields(data, redact_sensitive=redact_sensitive))
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@strawberry.type(description="A remote-access VPN user and its live connection state.")
+class RemoteVpnClient:
+    id: strawberry.ID | None
+    name: str | None
+    status: str | None
+    online: bool | None
+    vpn_type: str | None
+    server_id: str | None
+    server_name: str | None
+    public_key: str | None
+    tunnel_ip: str | None
+    remote_ip: str | None
+    remote_port: int | None
+    country_code: str | None
+    connected_since: str | None
+    last_seen: str | None
+    uptime_seconds: int | None
+    rx_bytes: int | None
+    tx_bytes: int | None
+    rx_rate_bps: float | None
+    tx_rate_bps: float | None
+
+    @classmethod
+    def render_hint(cls, kind: str) -> dict:
+        return {
+            "kind": kind,
+            "primary_key": "id",
+            "display_columns": ["name", "status", "tunnel_ip", "remote_ip", "connected_since"],
+            "sort_default": "name:asc",
+        }
+
+    @classmethod
+    def from_manager_output(cls, obj: Any) -> "RemoteVpnClient":
+        return cls(**remote_vpn_client_from_controller(_get_raw(obj)).model_dump())
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@strawberry.type(description="A site-to-site VPN tunnel.")
+class SiteToSiteVpn:
+    id: strawberry.ID | None
+    name: str | None
+    enabled: bool | None
+    vpn_type: str | None
+    peer_address: str | None
+    remote_subnets: list[str] | None
+    remote_site_id: str | None
+
+    @classmethod
+    def render_hint(cls, kind: str) -> dict:
+        return {
+            "kind": kind,
+            "primary_key": "id",
+            "display_columns": ["name", "vpn_type", "enabled", "peer_address"],
+            "sort_default": "name:asc",
+        }
+
+    @classmethod
+    def from_manager_output(cls, obj: Any) -> "SiteToSiteVpn":
+        return cls(**site_to_site_vpn_from_controller(_get_raw(obj)).model_dump())
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _get_raw(obj: Any) -> dict:
+    if isinstance(obj, dict):
+        return obj
+    raw = getattr(obj, "raw", None)
+    return raw if isinstance(raw, dict) else {}

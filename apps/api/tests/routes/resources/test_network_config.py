@@ -646,3 +646,96 @@ async def test_get_traffic_flows_next_cursor_and_window_guard(tmp_path, monkeypa
         )
     assert r2.status_code == 400, r2.text
     assert r3.status_code == 400, r3.text
+
+
+# ---------- WireGuard peers / remote-access VPN clients / site-to-site ----------
+
+
+async def _get(app, key, cid, path):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        sep = "&" if "?" in path else "?"
+        return await c.get(f"{path}{sep}controller={cid}", headers={"Authorization": f"Bearer {key}"})
+
+
+@pytest.mark.asyncio
+async def test_list_wireguard_peers_passes_server_filter_and_hides_psk(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await _bootstrap(tmp_path)
+    _stub_connection(app, cid)
+    seen = {}
+
+    async def fake_get(self, server_id=None):
+        seen["server_id"] = server_id
+        return [{"_id": "peer-1", "name": "Laptop", "network_id": "s-1", "preshared_key": "TEST_FAKE_PSK"}]
+
+    from unifi_core.network.managers.vpn_manager import VpnManager
+
+    monkeypatch.setattr(VpnManager, "get_wireguard_peers", fake_get)
+
+    r = await _get(app, key, cid, "/v1/sites/default/wireguard-peers?server_id=s-1")
+    assert r.status_code == 200, r.text
+    assert seen == {"server_id": "s-1"}
+    body = r.json()
+    assert body["render_hint"]["kind"] == "list"
+    assert body["items"][0]["preshared_key_enabled"] is True
+    assert "TEST_FAKE_PSK" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_get_wireguard_peer_details_404(tmp_path, monkeypatch) -> None:
+    from unifi_core.exceptions import UniFiNotFoundError
+
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await _bootstrap(tmp_path)
+    _stub_connection(app, cid)
+
+    async def fake_get(self, peer_id):
+        raise UniFiNotFoundError("wireguard_peer", peer_id)
+
+    from unifi_core.network.managers.vpn_manager import VpnManager
+
+    monkeypatch.setattr(VpnManager, "get_wireguard_peer_details", fake_get)
+
+    r = await _get(app, key, cid, "/v1/sites/default/wireguard-peers/missing")
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_list_remote_vpn_clients_passes_filters(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await _bootstrap(tmp_path)
+    _stub_connection(app, cid)
+    seen = {}
+
+    async def fake_get(self, include_offline=False, server_id=None):
+        seen.update(include_offline=include_offline, server_id=server_id)
+        return [{"id": "wgsrv1:k:1", "display_name": "Laptop", "status": "online", "vpn_type": "wireguard-server"}]
+
+    from unifi_core.network.managers.vpn_manager import VpnManager
+
+    monkeypatch.setattr(VpnManager, "get_remote_vpn_clients", fake_get)
+
+    r = await _get(app, key, cid, "/v1/sites/default/remote-vpn-clients?include_offline=true")
+    assert r.status_code == 200, r.text
+    assert seen == {"include_offline": True, "server_id": None}
+    item = r.json()["items"][0]
+    assert item["name"] == "Laptop"
+    assert item["online"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_site_to_site_vpns_happy_path(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await _bootstrap(tmp_path)
+    _stub_connection(app, cid)
+
+    async def fake_get(self):
+        return [{"_id": "s2s-1", "name": "Branch", "purpose": "site-vpn", "vpn_type": "ipsec-vpn"}]
+
+    from unifi_core.network.managers.vpn_manager import VpnManager
+
+    monkeypatch.setattr(VpnManager, "get_site_to_site_vpns", fake_get)
+
+    r = await _get(app, key, cid, "/v1/sites/default/site-to-site-vpns")
+    assert r.status_code == 200, r.text
+    assert r.json()["items"][0]["vpn_type"] == "ipsec-vpn"

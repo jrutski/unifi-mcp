@@ -1,6 +1,6 @@
 # Tool Catalog
 
-The UniFi Network MCP server exposes 210 tools, all prefixed with `unifi_`. Read-only tools are always available. Mutating tools are controlled by the [permission system](permissions.md).
+The UniFi Network MCP server exposes 214 tools, all prefixed with `unifi_`. Read-only tools are always available. Mutating tools are controlled by the [permission system](permissions.md).
 
 Standard MCP clients should use `tools/list` for currently registered tools. For compact manifest-backed metadata in lazy workflows, call the `unifi_tool_index` compatibility meta-tool at runtime, or inspect `src/unifi_network_mcp/tools_manifest.json`. In `meta_only` mode, the index initially contains only meta-tools; executing a known domain tool lazily registers its module, so later index results can include those loaded tools.
 
@@ -202,16 +202,20 @@ inspect its `mutation_applied` state and resource ID before retrying or cleaning
 - `unifi_update_switch_stp` — Update STP priority and version
 - `unifi_set_jumbo_frames` — Enable/disable jumbo frames
 
-## VPN (8 tools)
+## VPN (12 tools)
 
-- `unifi_list_vpn_clients` — List VPN clients (WireGuard, OpenVPN)
-- `unifi_get_vpn_client_details` — Get client details by ID
+- `unifi_list_vpn_clients` — List outbound VPN client tunnels (the gateway connecting out to a WireGuard or OpenVPN provider)
+- `unifi_get_vpn_client_details` — Get outbound VPN client details by ID
 - `unifi_update_vpn_client_state` — Preview, then enable/disable a VPN client with read-back verification
 - `unifi_delete_vpn_client` — Preview, then delete a VPN client
 - `unifi_list_vpn_servers` — List VPN servers
 - `unifi_get_vpn_server_details` — Get server details by ID
 - `unifi_update_vpn_server_alternate_address` — Preview, then update a WireGuard server’s advertised address with read-back verification
 - `unifi_update_vpn_server_state` — Preview, then enable/disable a VPN server with read-back verification
+- `unifi_list_wireguard_peers` — List peers configured on WireGuard VPN servers (preshared keys are never returned)
+- `unifi_get_wireguard_peer_details` — Get one WireGuard peer by ID
+- `unifi_list_remote_vpn_clients` — List remote-access VPN users and who is connected now: tunnel IP, public address, session start, traffic
+- `unifi_list_site_to_site_vpns` — List site-to-site VPN tunnels (IPsec, OpenVPN, WireGuard, UniFi-managed)
 
 ## Devices (10 tools)
 

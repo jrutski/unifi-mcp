@@ -109,7 +109,13 @@ from unifi_api.graphql.types.network.traffic_flow import (
     TrafficFlowStatistics,
 )
 from unifi_api.graphql.types.network.voucher import Voucher
-from unifi_api.graphql.types.network.vpn import VpnClient, VpnServer
+from unifi_api.graphql.types.network.vpn import (
+    RemoteVpnClient,
+    SiteToSiteVpn,
+    VpnClient,
+    VpnServer,
+    WireGuardPeer,
+)
 from unifi_api.graphql.types.network.wlan import Wlan
 from unifi_api.services.controllers import get_controller
 from unifi_api.services.incident_evidence import (
@@ -454,6 +460,50 @@ async def _fetch_vpn_servers(
             return list(await mgr.get_vpn_servers())
 
     return await ctx.cache.get_or_fetch(key, _do)
+
+
+async def _vpn_manager_call(ctx: GraphQLContext, controller: str, site: str, key: str, method: str, **kwargs) -> list:
+    async def _do() -> list:
+        async with ctx.sessionmaker() as session:
+            mgr = await ctx.manager_factory.get_domain_manager(
+                session,
+                controller,
+                "network",
+                "vpn_manager",
+                site=site,
+            )
+            return list(await getattr(mgr, method)(**kwargs))
+
+    return await ctx.cache.get_or_fetch(key, _do)
+
+
+async def _fetch_wireguard_peers(ctx: GraphQLContext, controller: str, site: str, server_id: str | None) -> list:
+    key = f"network/wireguard-peers/{controller}/{site}/{server_id or '*'}"
+    return await _vpn_manager_call(ctx, controller, site, key, "get_wireguard_peers", server_id=server_id)
+
+
+async def _fetch_remote_vpn_clients(
+    ctx: GraphQLContext,
+    controller: str,
+    site: str,
+    include_offline: bool,
+    server_id: str | None,
+) -> list:
+    key = f"network/remote-vpn-clients/{controller}/{site}/{include_offline}/{server_id or '*'}"
+    return await _vpn_manager_call(
+        ctx,
+        controller,
+        site,
+        key,
+        "get_remote_vpn_clients",
+        include_offline=include_offline,
+        server_id=server_id,
+    )
+
+
+async def _fetch_site_to_site_vpns(ctx: GraphQLContext, controller: str, site: str) -> list:
+    key = f"network/site-to-site-vpns/{controller}/{site}"
+    return await _vpn_manager_call(ctx, controller, site, key, "get_site_to_site_vpns")
 
 
 async def _fetch_dns_records(
@@ -1613,6 +1663,24 @@ class VpnServerPage:
     next_cursor: str | None
 
 
+@strawberry.type(description="Paginated page of WireGuard VPN server peers.")
+class WireGuardPeerPage:
+    items: list[WireGuardPeer]
+    next_cursor: str | None
+
+
+@strawberry.type(description="Paginated page of remote-access VPN clients.")
+class RemoteVpnClientPage:
+    items: list[RemoteVpnClient]
+    next_cursor: str | None
+
+
+@strawberry.type(description="Paginated page of site-to-site VPN tunnels.")
+class SiteToSiteVpnPage:
+    items: list[SiteToSiteVpn]
+    next_cursor: str | None
+
+
 @strawberry.type(description="Paginated page of DNS records.")
 class DnsRecordPage:
     items: list[DnsRecord]
@@ -2479,6 +2547,99 @@ class NetworkQuery:
             if vid == id:
                 return VpnServer.from_manager_output(v)
         return None
+
+    @strawberry.field(
+        permission_classes=[IsRead],
+        description="List peers configured on WireGuard remote-access VPN servers (paginated).",
+    )
+    async def wireguard_peers(
+        self,
+        info: Info,
+        controller: strawberry.ID,
+        site: str = "default",
+        server_id: str | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> WireGuardPeerPage:
+        ctx: GraphQLContext = info.context
+        raw = await _fetch_wireguard_peers(ctx, controller, site, server_id)
+
+        from unifi_api.services.pagination import paginate
+
+        page, next_cursor = paginate(list(raw), limit=limit, cursor=_decode_cursor(cursor), key_fn=_id_key)
+        return WireGuardPeerPage(
+            items=[WireGuardPeer.from_manager_output(p, redact_sensitive=ctx.redact_sensitive_fields) for p in page],
+            next_cursor=next_cursor.encode() if next_cursor else None,
+        )
+
+    @strawberry.field(
+        permission_classes=[IsRead],
+        description="Look up a single WireGuard VPN server peer by id.",
+    )
+    async def wireguard_peer(
+        self,
+        info: Info,
+        controller: strawberry.ID,
+        id: strawberry.ID,
+        site: str = "default",
+    ) -> WireGuardPeer | None:
+        ctx: GraphQLContext = info.context
+        raw = await _fetch_wireguard_peers(ctx, controller, site, None)
+        for p in raw:
+            if isinstance(p, dict) and p.get("_id") == id:
+                return WireGuardPeer.from_manager_output(p, redact_sensitive=ctx.redact_sensitive_fields)
+        return None
+
+    @strawberry.field(
+        permission_classes=[IsRead],
+        description=(
+            "List remote-access VPN users with their live connection state (paginated). "
+            "Connected users only unless includeOffline is true."
+        ),
+    )
+    async def remote_vpn_clients(
+        self,
+        info: Info,
+        controller: strawberry.ID,
+        site: str = "default",
+        include_offline: bool = False,
+        server_id: str | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> RemoteVpnClientPage:
+        ctx: GraphQLContext = info.context
+        raw = await _fetch_remote_vpn_clients(ctx, controller, site, include_offline, server_id)
+
+        from unifi_api.services.pagination import paginate
+
+        page, next_cursor = paginate(list(raw), limit=limit, cursor=_decode_cursor(cursor), key_fn=_id_key)
+        return RemoteVpnClientPage(
+            items=[RemoteVpnClient.from_manager_output(c) for c in page],
+            next_cursor=next_cursor.encode() if next_cursor else None,
+        )
+
+    @strawberry.field(
+        permission_classes=[IsRead],
+        description="List site-to-site VPN tunnels (paginated).",
+    )
+    async def site_to_site_vpns(
+        self,
+        info: Info,
+        controller: strawberry.ID,
+        site: str = "default",
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> SiteToSiteVpnPage:
+        ctx: GraphQLContext = info.context
+        raw = await _fetch_site_to_site_vpns(ctx, controller, site)
+
+        from unifi_api.services.pagination import paginate
+
+        page, next_cursor = paginate(list(raw), limit=limit, cursor=_decode_cursor(cursor), key_fn=_id_key)
+        return SiteToSiteVpnPage(
+            items=[SiteToSiteVpn.from_manager_output(t) for t in page],
+            next_cursor=next_cursor.encode() if next_cursor else None,
+        )
 
     # ---- DNS domain ------------------------------------------------------
 

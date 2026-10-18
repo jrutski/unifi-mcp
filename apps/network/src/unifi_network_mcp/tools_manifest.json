@@ -1,5 +1,5 @@
 {
-  "count": 210,
+  "count": 214,
   "generated_by": "scripts/generate_tool_manifest.py",
   "module_map": {
     "unifi_adopt_device": "unifi_network_mcp.tools.devices",
@@ -112,6 +112,7 @@
     "unifi_get_voucher_details": "unifi_network_mcp.tools.hotspot",
     "unifi_get_vpn_client_details": "unifi_network_mcp.tools.vpn",
     "unifi_get_vpn_server_details": "unifi_network_mcp.tools.vpn",
+    "unifi_get_wireguard_peer_details": "unifi_network_mcp.tools.vpn",
     "unifi_get_wlan_details": "unifi_network_mcp.tools.network",
     "unifi_list_acl_rules": "unifi_network_mcp.tools.acl",
     "unifi_list_active_routes": "unifi_network_mcp.tools.routing",
@@ -139,13 +140,16 @@
     "unifi_list_port_forwards": "unifi_network_mcp.tools.port_forwards",
     "unifi_list_port_profiles": "unifi_network_mcp.tools.switch",
     "unifi_list_qos_rules": "unifi_network_mcp.tools.qos",
+    "unifi_list_remote_vpn_clients": "unifi_network_mcp.tools.vpn",
     "unifi_list_rogue_aps": "unifi_network_mcp.tools.devices",
     "unifi_list_routes": "unifi_network_mcp.tools.routing",
+    "unifi_list_site_to_site_vpns": "unifi_network_mcp.tools.vpn",
     "unifi_list_traffic_routes": "unifi_network_mcp.tools.traffic_routes",
     "unifi_list_usergroups": "unifi_network_mcp.tools.usergroups",
     "unifi_list_vouchers": "unifi_network_mcp.tools.hotspot",
     "unifi_list_vpn_clients": "unifi_network_mcp.tools.vpn",
     "unifi_list_vpn_servers": "unifi_network_mcp.tools.vpn",
+    "unifi_list_wireguard_peers": "unifi_network_mcp.tools.vpn",
     "unifi_list_wlans": "unifi_network_mcp.tools.network",
     "unifi_locate_device": "unifi_network_mcp.tools.devices",
     "unifi_lookup_by_ip": "unifi_network_mcp.tools.clients",
@@ -11558,7 +11562,7 @@
         "readOnlyHint": true
       },
       "auth_method": "local_only",
-      "description": "Get details for a specific VPN client by ID.",
+      "description": "Get one outbound VPN client configuration (gateway-as-client tunnel) by ID from unifi_list_vpn_clients.",
       "name": "unifi_get_vpn_client_details",
       "schema": {
         "input": {
@@ -11737,6 +11741,99 @@
         }
       },
       "title": "Get VPN Server Details"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "auth_method": "local_only",
+      "description": "Get one WireGuard VPN server peer by id from unifi_list_wireguard_peers: name, server_id, interface_ip, allowed_ips, public_key and preshared_key_enabled (the key itself is never returned). These IDs are scoped to the WireGuard peer tool family \u2014 do not pass them to other VPN client tools. Requires Network session authentication.",
+      "name": "unifi_get_wireguard_peer_details",
+      "schema": {
+        "input": {
+          "properties": {
+            "peer_id": {
+              "description": "WireGuard peer id (from unifi_list_wireguard_peers)",
+              "type": "string"
+            }
+          },
+          "required": [
+            "peer_id"
+          ],
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "description": "Structured view of the existing UniFi MCP tool response contract.",
+          "properties": {
+            "data": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Successful result payload.",
+              "title": "Data"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Actionable error message for handled failures.",
+              "title": "Error"
+            },
+            "preview": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Mutation preview payload returned before confirmation.",
+              "title": "Preview"
+            },
+            "requires_confirmation": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when a mutation preview requires caller confirmation.",
+              "title": "Requires Confirmation"
+            },
+            "success": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when the tool call succeeded; false for handled errors.",
+              "title": "Success"
+            }
+          },
+          "title": "UniFiToolResponse",
+          "type": "object"
+        }
+      },
+      "title": "Get Wireguard Peer Details"
     },
     {
       "annotations": {
@@ -12531,7 +12628,7 @@
         "readOnlyHint": true
       },
       "auth_method": "either",
-      "description": "Returns connected clients with mac, name, hostname, ip, status (online/offline), connection type (wired/wireless), and for wireless clients: ssid, signal_dbm, channel, radio. Filter by filter_type (all/wired/wireless), set include_offline=true for historical clients. Use search to filter by name/hostname/IP/MAC (case-insensitive). For a single client's full raw object, use unifi_get_client_details. For IP-to-client lookup, use unifi_lookup_by_ip. Pass an entry's mac to the client tools as mac_address (unifi_get_client_details, unifi_block_client, unifi_rename_client, unifi_get_client_sessions, unifi_get_client_dpi_traffic, unifi_get_client_wifi_details, unifi_recent_events). API-key inventory uses legacy reads when supported, otherwise limited public inventory. Public results include source_api=integration and integration_id; missing legacy fields are unknown. These IDs are scoped to the Integration inventory tool family \u2014 do not pass them to other resource tools. include_offline=true requires session credentials for historical inventory. Full details and mutations can require session credentials.",
+      "description": "Returns connected clients with mac, name, hostname, ip, status (online/offline), connection type (wired/wireless), and for wireless clients: ssid, signal_dbm, channel, radio. Filter by filter_type (all/wired/wireless), set include_offline=true for historical clients. Use search to filter by name/hostname/IP/MAC (case-insensitive). For a single client's full raw object, use unifi_get_client_details. For IP-to-client lookup, use unifi_lookup_by_ip. Pass an entry's mac to the client tools as mac_address (unifi_get_client_details, unifi_block_client, unifi_rename_client, unifi_get_client_sessions, unifi_get_client_dpi_traffic, unifi_get_client_wifi_details, unifi_recent_events). Session-based results do not include remote-access VPN users; use unifi_list_remote_vpn_clients for them and their connection state. API-key inventory uses legacy reads when supported, otherwise limited public inventory. Public results include source_api=integration and integration_id; missing legacy fields are unknown. These IDs are scoped to the Integration inventory tool family \u2014 do not pass them to other resource tools. include_offline=true requires session credentials for historical inventory. Full details and mutations can require session credentials.",
       "name": "unifi_list_clients",
       "schema": {
         "input": {
@@ -14200,6 +14297,100 @@
         "readOnlyHint": true
       },
       "auth_method": "local_only",
+      "description": "List remote-access VPN users and whether they are connected right now (the VPN entries in the UniFi Client Devices list). Returns name, status/online, server, tunnel_ip, the public remote_ip/remote_port and country they connected from, connected_since, last_seen, uptime_seconds, rx/tx bytes and current rates, plus public_key for WireGuard users. Connected users only by default; set include_offline=true to include configured users who are not connected. Pass server_id from unifi_list_vpn_servers to filter to one server. Session-based unifi_list_clients results do not include these users. Requires Network session authentication.",
+      "name": "unifi_list_remote_vpn_clients",
+      "schema": {
+        "input": {
+          "properties": {
+            "include_offline": {
+              "description": "When true, also returns configured VPN users who are not connected. Default false",
+              "type": "boolean"
+            },
+            "server_id": {
+              "description": "Optional VPN server _id (from unifi_list_vpn_servers) to list only that server's users",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "description": "Structured view of the existing UniFi MCP tool response contract.",
+          "properties": {
+            "data": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Successful result payload.",
+              "title": "Data"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Actionable error message for handled failures.",
+              "title": "Error"
+            },
+            "preview": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Mutation preview payload returned before confirmation.",
+              "title": "Preview"
+            },
+            "requires_confirmation": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when a mutation preview requires caller confirmation.",
+              "title": "Requires Confirmation"
+            },
+            "success": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when the tool call succeeded; false for handled errors.",
+              "title": "Success"
+            }
+          },
+          "title": "UniFiToolResponse",
+          "type": "object"
+        }
+      },
+      "title": "List Remote VPN Clients"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "auth_method": "local_only",
       "description": "List neighboring/rogue APs detected by your access points. Defaults to a compact 100-record page; pass summary=false for raw records in the selected page. Filters apply before pagination, limit is at most 500, and pagination metadata includes total_count, returned_count/count, limit, offset, next_offset, and has_more.",
       "name": "unifi_list_rogue_aps",
       "schema": {
@@ -14391,6 +14582,91 @@
         }
       },
       "title": "List Routes"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "auth_method": "local_only",
+      "description": "List site-to-site VPN tunnels (IPsec, OpenVPN, WireGuard and UniFi-managed site-to-site), which unifi_list_vpn_clients and unifi_list_vpn_servers do not include. Returns id, name, enabled, vpn_type, peer_address, remote_subnets and remote_site_id; keys and passwords are not returned.",
+      "name": "unifi_list_site_to_site_vpns",
+      "schema": {
+        "input": {
+          "properties": {},
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "description": "Structured view of the existing UniFi MCP tool response contract.",
+          "properties": {
+            "data": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Successful result payload.",
+              "title": "Data"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Actionable error message for handled failures.",
+              "title": "Error"
+            },
+            "preview": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Mutation preview payload returned before confirmation.",
+              "title": "Preview"
+            },
+            "requires_confirmation": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when a mutation preview requires caller confirmation.",
+              "title": "Requires Confirmation"
+            },
+            "success": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when the tool call succeeded; false for handled errors.",
+              "title": "Success"
+            }
+          },
+          "title": "UniFiToolResponse",
+          "type": "object"
+        }
+      },
+      "title": "List Site To Site Vpns"
     },
     {
       "annotations": {
@@ -14673,7 +14949,7 @@
         "readOnlyHint": true
       },
       "auth_method": "local_only",
-      "description": "List all configured VPN clients (Wireguard, OpenVPN, etc).",
+      "description": "List outbound VPN client configurations: tunnels where the gateway connects out to an external VPN provider or server (WireGuard, OpenVPN). These are not people connected to your VPN server: for remote users and their live connection state use unifi_list_remote_vpn_clients, and for the peers configured on a WireGuard server use unifi_list_wireguard_peers.",
       "name": "unifi_list_vpn_clients",
       "schema": {
         "input": {
@@ -14836,6 +15112,96 @@
         }
       },
       "title": "List VPN Servers"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "auth_method": "local_only",
+      "description": "List the peers configured on WireGuard remote-access VPN servers (the Clients tab of a WireGuard VPN server in the UniFi UI). Returns id, name, server_id, interface_ip (tunnel IP), allowed_ips, public_key and preshared_key_enabled; preshared keys are never returned. Pass server_id from unifi_list_vpn_servers to filter to one server. For who is connected right now, use unifi_list_remote_vpn_clients (match on public_key). These IDs are scoped to the WireGuard peer tool family \u2014 do not pass them to other VPN client tools. Requires Network session authentication.",
+      "name": "unifi_list_wireguard_peers",
+      "schema": {
+        "input": {
+          "properties": {
+            "server_id": {
+              "description": "Optional VPN server _id (from unifi_list_vpn_servers) to list only that server's peers",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "description": "Structured view of the existing UniFi MCP tool response contract.",
+          "properties": {
+            "data": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Successful result payload.",
+              "title": "Data"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Actionable error message for handled failures.",
+              "title": "Error"
+            },
+            "preview": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Mutation preview payload returned before confirmation.",
+              "title": "Preview"
+            },
+            "requires_confirmation": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when a mutation preview requires caller confirmation.",
+              "title": "Requires Confirmation"
+            },
+            "success": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "True when the tool call succeeded; false for handled errors.",
+              "title": "Success"
+            }
+          },
+          "title": "UniFiToolResponse",
+          "type": "object"
+        }
+      },
+      "title": "List Wireguard Peers"
     },
     {
       "annotations": {

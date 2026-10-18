@@ -12,16 +12,17 @@ import logging
 import re
 from copy import deepcopy
 from dataclasses import replace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from aiounifi.errors import Forbidden, NoPermission, TwoFaTokenRequired, Unauthorized
-from aiounifi.models.api import ApiRequest
+from aiounifi.models.api import ApiRequest, ApiRequestV2
 
 from unifi_core.exceptions import UniFiNotFoundError
 from unifi_core.merge import deep_merge
 from unifi_core.network.managers.connection_manager import ConnectionManager, controller_error_code, response_status
 from unifi_core.network.models.vpn import (
     ALTERNATE_ADDRESS_KEYS,
+    SITE_TO_SITE_VPN_PURPOSE,
     VpnAlternateAddressError,
     alternate_address_to_controller_update,
     alternate_address_view,
@@ -34,6 +35,8 @@ logger = logging.getLogger("unifi-network-mcp")
 
 CACHE_PREFIX_VPN_CONFIGS = "vpn_configs"
 CACHE_PREFIX_NETWORKS = "networks"
+CACHE_PREFIX_WIREGUARD_PEERS = "wireguard_peers"
+CACHE_PREFIX_REMOTE_VPN_CLIENTS = "remote_vpn_clients"
 
 
 def classify_vpn_type(purpose: str, vpn_type: str) -> Tuple[bool, bool]:
@@ -192,9 +195,100 @@ class VpnManager:
             raise UniFiNotFoundError("vpn_server", server_id)
         return server
 
+    async def _get_v2_records(self, path: str, cache_prefix: str, operation: str) -> List[Dict[str, Any]]:
+        """GET a v2 collection that returns a JSON array, failing closed on malformed data.
+
+        Logs only the operation and exception class: these records carry client
+        names and IP addresses.
+        """
+        cache_key = f"{cache_prefix}_{self._connection.site}"
+        cached_data = self._connection.get_cached(cache_key)
+        if cached_data is not None:
+            return cached_data
+        try:
+            response = await self._connection.request(ApiRequestV2(method="get", path=path))
+        except Exception as exc:
+            logger.error("Failed to %s: %s", operation, type(exc).__name__)
+            raise
+        records = response.get("data") if isinstance(response, dict) else response
+        if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+            raise RuntimeError(f"Controller returned a malformed response; could not {operation}")
+        self._connection._update_cache(cache_key, records)
+        return records
+
+    async def get_wireguard_peers(self, server_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List peers configured on WireGuard remote-access VPN servers.
+
+        Args:
+            server_id: Optional networkconf _id of one VPN server to filter by.
+
+        Raises:
+            UniFiNotFoundError: If ``server_id`` is not a VPN server on this site.
+        """
+        if server_id is not None:
+            await self.get_vpn_server_details(server_id)
+        peers = await self._get_v2_records("/wireguard/users", CACHE_PREFIX_WIREGUARD_PEERS, "list WireGuard peers")
+        if server_id is None:
+            return peers
+        return [peer for peer in peers if peer.get("network_id") == server_id]
+
+    async def get_wireguard_peer_details(self, peer_id: str) -> Dict[str, Any]:
+        """Get one WireGuard peer by _id.
+
+        Raises:
+            UniFiNotFoundError: If the peer does not exist.
+        """
+        peers = await self.get_wireguard_peers()
+        peer = next((p for p in peers if p.get("_id") == peer_id), None)
+        if peer is None:
+            raise UniFiNotFoundError("wireguard_peer", peer_id)
+        return peer
+
+    async def get_remote_vpn_clients(
+        self, include_offline: bool = False, server_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List remote-access VPN users with their live connection state.
+
+        This is the controller's Client Devices "VPN" list. Remote-access users
+        never appear in ``stat/sta``, so the regular client tools cannot see them.
+
+        Args:
+            include_offline: Also return configured users that are not connected.
+            server_id: Optional networkconf _id of one VPN server to filter by.
+
+        Raises:
+            UniFiNotFoundError: If ``server_id`` is not a VPN server on this site.
+        """
+        if server_id is not None:
+            await self.get_vpn_server_details(server_id)
+        clients = await self._get_v2_records(
+            "/vpn/users", CACHE_PREFIX_REMOTE_VPN_CLIENTS, "list remote-access VPN clients"
+        )
+        return [
+            client
+            for client in clients
+            if (include_offline or client.get("status") == "online")
+            and (server_id is None or client.get("network_id") == server_id)
+        ]
+
+    async def get_site_to_site_vpns(self) -> List[Dict[str, Any]]:
+        """List site-to-site VPN tunnels.
+
+        These are VPN networks that are neither clients nor servers, so
+        ``get_vpn_configs`` never returns them.
+        """
+        networks = await self._get_all_network_configs()
+        return [
+            network
+            for network in networks
+            if str(network.get("purpose") or "").strip().casefold() == SITE_TO_SITE_VPN_PURPOSE
+        ]
+
     def _invalidate_vpn_caches(self) -> None:
-        """Invalidate networkconf and every VPN classification cache."""
+        """Invalidate networkconf, every VPN classification cache and the v2 VPN reads."""
         self._connection._invalidate_cache(f"{CACHE_PREFIX_NETWORKS}_{self._connection.site}")
+        self._connection._invalidate_cache(f"{CACHE_PREFIX_WIREGUARD_PEERS}_{self._connection.site}")
+        self._connection._invalidate_cache(f"{CACHE_PREFIX_REMOTE_VPN_CLIENTS}_{self._connection.site}")
         for suffix in ["_True_True", "_True_False", "_False_True"]:
             self._connection._invalidate_cache(f"{CACHE_PREFIX_VPN_CONFIGS}_{self._connection.site}{suffix}")
 

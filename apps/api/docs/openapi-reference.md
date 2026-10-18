@@ -1527,6 +1527,34 @@ Read CyberSecure posture. Gateway device IDs belong to the legacy Network device
 
 ## network/vpn
 
+### `GET /v1/sites/{site_id}/remote-vpn-clients` — List Remote Vpn Clients
+
+
+**Parameters:**
+
+- `site_id` (path) (required)
+- `include_offline` (query)
+- `server_id` (query)
+- `limit` (query)
+- `cursor` (query)
+- `controller` (query)
+
+
+**Returns:** `Page_RemoteVpnClientModel_`
+
+### `GET /v1/sites/{site_id}/site-to-site-vpns` — List Site To Site Vpns
+
+
+**Parameters:**
+
+- `site_id` (path) (required)
+- `limit` (query)
+- `cursor` (query)
+- `controller` (query)
+
+
+**Returns:** `Page_SiteToSiteVpnModel_`
+
 ### `GET /v1/sites/{site_id}/vpn-clients` — List Vpn Clients
 
 
@@ -1576,6 +1604,32 @@ Read CyberSecure posture. Gateway device IDs belong to the legacy Network device
 
 
 **Returns:** `Detail_VpnServerModel_`
+
+### `GET /v1/sites/{site_id}/wireguard-peers` — List Wireguard Peers
+
+
+**Parameters:**
+
+- `site_id` (path) (required)
+- `server_id` (query)
+- `limit` (query)
+- `cursor` (query)
+- `controller` (query)
+
+
+**Returns:** `Page_WireGuardPeerModel_`
+
+### `GET /v1/sites/{site_id}/wireguard-peers/{peer_id}` — Get Wireguard Peer Details
+
+
+**Parameters:**
+
+- `site_id` (path) (required)
+- `peer_id` (path) (required)
+- `controller` (query)
+
+
+**Returns:** `Detail_WireGuardPeerModel_`
 
 
 ## network/wireless

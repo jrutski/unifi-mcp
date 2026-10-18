@@ -6,7 +6,7 @@ including managing VPN clients and servers.
 """
 
 import logging
-from typing import Annotated, Any, Dict
+from typing import Annotated, Any, Dict, Optional
 
 from mcp.types import ToolAnnotations
 from pydantic import Field, WithJsonSchema
@@ -17,7 +17,10 @@ from unifi_core.network.models.vpn import (
     VpnAlternateAddressError,
     VpnAlternateAddressToolInput,
     alternate_address_view,
+    remote_vpn_client_from_controller,
+    site_to_site_vpn_from_controller,
     vpn_alternate_address_input_schema,
+    wireguard_peer_from_controller,
 )
 from unifi_core.redaction import redact_sensitive_fields
 from unifi_core.write_verification import format_tool_payload
@@ -80,7 +83,12 @@ async def update_vpn_server_alternate_address(
 
 @server.tool(
     name="unifi_list_vpn_clients",
-    description="List all configured VPN clients (Wireguard, OpenVPN, etc).",
+    description=(
+        "List outbound VPN client configurations: tunnels where the gateway connects out to an external VPN "
+        "provider or server (WireGuard, OpenVPN). These are not people connected to your VPN server: for "
+        "remote users and their live connection state use unifi_list_remote_vpn_clients, and for the peers "
+        "configured on a WireGuard server use unifi_list_wireguard_peers."
+    ),
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
 async def list_vpn_clients() -> Dict[str, Any]:
@@ -104,7 +112,9 @@ async def list_vpn_clients() -> Dict[str, Any]:
 
 @server.tool(
     name="unifi_get_vpn_client_details",
-    description="Get details for a specific VPN client by ID.",
+    description=(
+        "Get one outbound VPN client configuration (gateway-as-client tunnel) by ID from unifi_list_vpn_clients."
+    ),
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
 async def get_vpn_client_details(
@@ -327,3 +337,155 @@ async def update_vpn_server_state(
     except Exception as e:
         logger.error("Error updating state for VPN server %s: %s", server_id, e, exc_info=True)
         return {"success": False, "error": f"Failed to update state for VPN server {server_id}: {e}"}
+
+
+def _read_error(operation: str, exc: Exception) -> Dict[str, Any]:
+    """Error envelope for the read tools below.
+
+    Only locally authored messages are echoed; controller exception text can
+    embed client names and addresses, so other failures report their class.
+    """
+    if type(exc) in (UniFiNotFoundError, RuntimeError):
+        return {"success": False, "error": f"Failed to {operation}: {exc}"}
+    return {
+        "success": False,
+        "error": f"Failed to {operation} ({type(exc).__name__}); check Network session authentication",
+    }
+
+
+@server.tool(
+    name="unifi_list_wireguard_peers",
+    description=(
+        "List the peers configured on WireGuard remote-access VPN servers (the Clients tab of a WireGuard VPN "
+        "server in the UniFi UI). Returns id, name, server_id, interface_ip (tunnel IP), allowed_ips, public_key "
+        "and preshared_key_enabled; preshared keys are never returned. Pass server_id from unifi_list_vpn_servers "
+        "to filter to one server. For who is connected right now, use unifi_list_remote_vpn_clients (match on "
+        "public_key). These IDs are scoped to the WireGuard peer tool family — do not pass them to other VPN "
+        "client tools. Requires Network session authentication."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+)
+async def list_wireguard_peers(
+    server_id: Annotated[
+        Optional[str],
+        Field(description="Optional VPN server _id (from unifi_list_vpn_servers) to list only that server's peers"),
+    ] = None,
+) -> Dict[str, Any]:
+    """List WireGuard peers through the Core manager."""
+    try:
+        peers = await vpn_manager.get_wireguard_peers(server_id)
+        rows = [wireguard_peer_from_controller(peer).model_dump() for peer in peers]
+        return redact_sensitive_fields(
+            {
+                "success": True,
+                "site": vpn_manager._connection.site,
+                "server_id": server_id,
+                "count": len(rows),
+                "wireguard_peers": rows,
+            },
+            redact_sensitive=should_redact_sensitive_fields(),
+        )
+    except Exception as exc:
+        logger.error("Error listing WireGuard peers: %s", type(exc).__name__)
+        return _read_error("list WireGuard peers", exc)
+
+
+@server.tool(
+    name="unifi_get_wireguard_peer_details",
+    description=(
+        "Get one WireGuard VPN server peer by id from unifi_list_wireguard_peers: name, server_id, interface_ip, "
+        "allowed_ips, public_key and preshared_key_enabled (the key itself is never returned). These IDs are "
+        "scoped to the WireGuard peer tool family — do not pass them to other VPN client tools. Requires Network "
+        "session authentication."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+)
+async def get_wireguard_peer_details(
+    peer_id: Annotated[str, Field(description="WireGuard peer id (from unifi_list_wireguard_peers)")],
+) -> Dict[str, Any]:
+    """Get one WireGuard peer through the Core manager."""
+    try:
+        peer = await vpn_manager.get_wireguard_peer_details(peer_id)
+        return redact_sensitive_fields(
+            {
+                "success": True,
+                "site": vpn_manager._connection.site,
+                "peer_id": peer_id,
+                "details": wireguard_peer_from_controller(peer).model_dump(),
+            },
+            redact_sensitive=should_redact_sensitive_fields(),
+        )
+    except Exception as exc:
+        logger.error("Error getting WireGuard peer details: %s", type(exc).__name__)
+        return _read_error(f"get WireGuard peer {peer_id}", exc)
+
+
+@server.tool(
+    name="unifi_list_remote_vpn_clients",
+    description=(
+        "List remote-access VPN users and whether they are connected right now (the VPN entries in the UniFi "
+        "Client Devices list). Returns name, status/online, server, tunnel_ip, the public remote_ip/remote_port "
+        "and country they connected from, connected_since, last_seen, uptime_seconds, rx/tx bytes and current "
+        "rates, plus public_key for WireGuard users. Connected users only by default; set include_offline=true "
+        "to include configured users who are not connected. Pass server_id from unifi_list_vpn_servers to filter "
+        "to one server. Session-based unifi_list_clients results do not include these users. Requires Network "
+        "session authentication."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+)
+async def list_remote_vpn_clients(
+    include_offline: Annotated[
+        bool, Field(description="When true, also returns configured VPN users who are not connected. Default false")
+    ] = False,
+    server_id: Annotated[
+        Optional[str],
+        Field(description="Optional VPN server _id (from unifi_list_vpn_servers) to list only that server's users"),
+    ] = None,
+) -> Dict[str, Any]:
+    """List remote-access VPN users through the Core manager."""
+    try:
+        clients = await vpn_manager.get_remote_vpn_clients(include_offline=include_offline, server_id=server_id)
+        rows = [remote_vpn_client_from_controller(client).model_dump() for client in clients]
+        return redact_sensitive_fields(
+            {
+                "success": True,
+                "site": vpn_manager._connection.site,
+                "include_offline": include_offline,
+                "server_id": server_id,
+                "count": len(rows),
+                "online_count": sum(1 for row in rows if row["online"] is True),
+                "remote_vpn_clients": rows,
+            },
+            redact_sensitive=should_redact_sensitive_fields(),
+        )
+    except Exception as exc:
+        logger.error("Error listing remote-access VPN clients: %s", type(exc).__name__)
+        return _read_error("list remote-access VPN clients", exc)
+
+
+@server.tool(
+    name="unifi_list_site_to_site_vpns",
+    description=(
+        "List site-to-site VPN tunnels (IPsec, OpenVPN, WireGuard and UniFi-managed site-to-site), which "
+        "unifi_list_vpn_clients and unifi_list_vpn_servers do not include. Returns id, name, enabled, vpn_type, "
+        "peer_address, remote_subnets and remote_site_id; keys and passwords are not returned."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+)
+async def list_site_to_site_vpns() -> Dict[str, Any]:
+    """List site-to-site VPN tunnels through the Core manager."""
+    try:
+        tunnels = await vpn_manager.get_site_to_site_vpns()
+        rows = [site_to_site_vpn_from_controller(tunnel).model_dump() for tunnel in tunnels]
+        return redact_sensitive_fields(
+            {
+                "success": True,
+                "site": vpn_manager._connection.site,
+                "count": len(rows),
+                "site_to_site_vpns": rows,
+            },
+            redact_sensitive=should_redact_sensitive_fields(),
+        )
+    except Exception as exc:
+        logger.error("Error listing site-to-site VPNs: %s", type(exc).__name__)
+        return _read_error("list site-to-site VPNs", exc)

@@ -209,3 +209,157 @@ async def test_delete_vpn_client_preview_redacts_secret_and_confirm_deletes() ->
     assert preview["preview"]["will_delete"]["wireguard_client_private_key"] == REDACTED
     assert confirmed["success"] is True
     mock_mgr.delete_vpn_client.assert_awaited_once_with("wg-manual")
+
+
+# ---------------------------------------------------------------------------
+# WireGuard peers, remote-access VPN clients, site-to-site tunnels (read-only)
+# ---------------------------------------------------------------------------
+
+_PEER = {
+    "_id": "peer-1",
+    "name": "Laptop",
+    "network_id": "server-1",
+    "interface_ip": "192.0.2.4",
+    "allowed_ips": [],
+    "public_key": "TEST_FAKE_PUBLIC_KEY_ffffffffffffff=",
+    "preshared_key": "TEST_FAKE_PSK_gggggggggggggggggggggg=",
+}
+
+_VPN_USERS = [
+    {
+        "id": "wgsrv1:k1:1",
+        "name": "TEST_FAKE_PUBLIC_KEY_ffffffffffffff=",
+        "display_name": "Laptop",
+        "status": "online",
+        "ip": "192.0.2.4",
+        "remote_ip": "203.0.113.40",
+        "network_id": "server-1",
+        "vpn_type": "wireguard-server",
+    },
+    {"id": "wgsrv1:k2:2", "name": "k2", "display_name": "Phone", "status": "offline", "vpn_type": "wireguard-server"},
+]
+
+
+@pytest.mark.asyncio
+async def test_list_wireguard_peers_projects_rows_without_preshared_key() -> None:
+    with patch("unifi_network_mcp.tools.vpn.vpn_manager") as mock_mgr:
+        mock_mgr.get_wireguard_peers = AsyncMock(return_value=[_PEER])
+        mock_mgr._connection.site = "default"
+        from unifi_network_mcp.tools.vpn import list_wireguard_peers
+
+        result = await list_wireguard_peers(server_id="server-1")
+
+    mock_mgr.get_wireguard_peers.assert_awaited_once_with("server-1")
+    assert result["success"] is True
+    assert result["count"] == 1
+    assert result["wireguard_peers"][0] == {
+        "id": "peer-1",
+        "name": "Laptop",
+        "server_id": "server-1",
+        "interface_ip": "192.0.2.4",
+        "allowed_ips": [],
+        "public_key": _PEER["public_key"],
+        "preshared_key_enabled": True,
+    }
+    assert _PEER["preshared_key"] not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_list_wireguard_peers_reports_unknown_server() -> None:
+    from unifi_core.exceptions import UniFiNotFoundError
+
+    with patch("unifi_network_mcp.tools.vpn.vpn_manager") as mock_mgr:
+        mock_mgr.get_wireguard_peers = AsyncMock(side_effect=UniFiNotFoundError("vpn_server", "nope"))
+        from unifi_network_mcp.tools.vpn import list_wireguard_peers
+
+        result = await list_wireguard_peers(server_id="nope")
+
+    assert result == {"success": False, "error": "Failed to list WireGuard peers: vpn_server 'nope' not found"}
+
+
+@pytest.mark.asyncio
+async def test_read_tool_errors_do_not_echo_controller_text() -> None:
+    with patch("unifi_network_mcp.tools.vpn.vpn_manager") as mock_mgr:
+        mock_mgr.get_remote_vpn_clients = AsyncMock(side_effect=ConnectionError("Laptop at 203.0.113.40"))
+        from unifi_network_mcp.tools.vpn import list_remote_vpn_clients
+
+        result = await list_remote_vpn_clients()
+
+    assert result["success"] is False
+    assert "ConnectionError" in result["error"]
+    assert "203.0.113.40" not in result["error"]
+    assert "Laptop" not in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_wireguard_peer_details_projects_one_peer() -> None:
+    with patch("unifi_network_mcp.tools.vpn.vpn_manager") as mock_mgr:
+        mock_mgr.get_wireguard_peer_details = AsyncMock(return_value=_PEER)
+        mock_mgr._connection.site = "default"
+        from unifi_network_mcp.tools.vpn import get_wireguard_peer_details
+
+        result = await get_wireguard_peer_details("peer-1")
+
+    assert result["success"] is True
+    assert result["details"]["name"] == "Laptop"
+    assert _PEER["preshared_key"] not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_list_remote_vpn_clients_passes_filters_and_counts_online() -> None:
+    with patch("unifi_network_mcp.tools.vpn.vpn_manager") as mock_mgr:
+        mock_mgr.get_remote_vpn_clients = AsyncMock(return_value=_VPN_USERS)
+        mock_mgr._connection.site = "default"
+        from unifi_network_mcp.tools.vpn import list_remote_vpn_clients
+
+        result = await list_remote_vpn_clients(include_offline=True, server_id="server-1")
+
+    mock_mgr.get_remote_vpn_clients.assert_awaited_once_with(include_offline=True, server_id="server-1")
+    assert result["success"] is True
+    assert result["count"] == 2
+    assert result["online_count"] == 1
+    first = result["remote_vpn_clients"][0]
+    assert first["name"] == "Laptop"
+    assert first["public_key"] == _VPN_USERS[0]["name"]
+    assert first["tunnel_ip"] == "192.0.2.4"
+    assert first["remote_ip"] == "203.0.113.40"
+
+
+@pytest.mark.asyncio
+async def test_list_site_to_site_vpns_projects_without_secrets() -> None:
+    tunnel = {
+        "_id": "s2s-1",
+        "name": "Branch",
+        "purpose": "site-vpn",
+        "vpn_type": "ipsec-vpn",
+        "ipsec_peer_ip": "203.0.113.9",
+        "x_ipsec_pre_shared_key": "TEST_FAKE_SECRET",
+    }
+    with patch("unifi_network_mcp.tools.vpn.vpn_manager") as mock_mgr:
+        mock_mgr.get_site_to_site_vpns = AsyncMock(return_value=[tunnel])
+        mock_mgr._connection.site = "default"
+        from unifi_network_mcp.tools.vpn import list_site_to_site_vpns
+
+        result = await list_site_to_site_vpns()
+
+    assert result["success"] is True
+    assert result["site_to_site_vpns"][0]["peer_address"] == "203.0.113.9"
+    assert "TEST_FAKE_SECRET" not in str(result)
+
+
+def test_new_vpn_read_tools_are_read_only_in_manifest() -> None:
+    import json
+    from pathlib import Path
+
+    import unifi_network_mcp
+
+    manifest = json.loads((Path(unifi_network_mcp.__file__).parent / "tools_manifest.json").read_text())
+    tools = {tool["name"]: tool for tool in manifest["tools"]}
+    for name in (
+        "unifi_list_wireguard_peers",
+        "unifi_get_wireguard_peer_details",
+        "unifi_list_remote_vpn_clients",
+        "unifi_list_site_to_site_vpns",
+    ):
+        assert tools[name]["annotations"]["readOnlyHint"] is True, name
+        assert tools[name]["annotations"]["openWorldHint"] is False, name

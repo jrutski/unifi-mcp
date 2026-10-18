@@ -1372,6 +1372,22 @@ type NetworkQuery {
   """Look up a single VPN server by id."""
   vpnServer(controller: ID!, id: ID!, site: String! = "default"): VpnServer
 
+  """
+  List peers configured on WireGuard remote-access VPN servers (paginated).
+  """
+  wireguardPeers(controller: ID!, site: String! = "default", serverId: String = null, limit: Int! = 50, cursor: String = null): WireGuardPeerPage!
+
+  """Look up a single WireGuard VPN server peer by id."""
+  wireguardPeer(controller: ID!, id: ID!, site: String! = "default"): WireGuardPeer
+
+  """
+  List remote-access VPN users with their live connection state (paginated). Connected users only unless includeOffline is true.
+  """
+  remoteVpnClients(controller: ID!, site: String! = "default", includeOffline: Boolean! = false, serverId: String = null, limit: Int! = 50, cursor: String = null): RemoteVpnClientPage!
+
+  """List site-to-site VPN tunnels (paginated)."""
+  siteToSiteVpns(controller: ID!, site: String! = "default", limit: Int! = 50, cursor: String = null): SiteToSiteVpnPage!
+
   """List static DNS records on the given controller/site (paginated)."""
   dnsRecords(controller: ID!, site: String! = "default", limit: Int! = 50, cursor: String = null): DnsRecordPage!
 
@@ -1973,6 +1989,35 @@ type RecordingStatusList {
   count: Int
 }
 
+"""A remote-access VPN user and its live connection state."""
+type RemoteVpnClient {
+  id: ID
+  name: String
+  status: String
+  online: Boolean
+  vpnType: String
+  serverId: String
+  serverName: String
+  publicKey: String
+  tunnelIp: String
+  remoteIp: String
+  remotePort: Int
+  countryCode: String
+  connectedSince: String
+  lastSeen: String
+  uptimeSeconds: Int
+  rxBytes: Int
+  txBytes: Int
+  rxRateBps: Float
+  txRateBps: Float
+}
+
+"""Paginated page of remote-access VPN clients."""
+type RemoteVpnClientPage {
+  items: [RemoteVpnClient!]!
+  nextCursor: String
+}
+
 """A single RF-scan result row reported by an AP."""
 type RfScanResult {
   bssid: ID
@@ -2052,6 +2097,23 @@ type SiteSettings {
   name: String
   role: String
   country: Int
+}
+
+"""A site-to-site VPN tunnel."""
+type SiteToSiteVpn {
+  id: ID
+  name: String
+  enabled: Boolean
+  vpnType: String
+  peerAddress: String
+  remoteSubnets: [String!]
+  remoteSiteId: String
+}
+
+"""Paginated page of site-to-site VPN tunnels."""
+type SiteToSiteVpnPage {
+  items: [SiteToSiteVpn!]!
+  nextCursor: String
 }
 
 """A UniFi Protect smart-detection event row."""
@@ -2461,6 +2523,23 @@ type VpnServerPage {
   nextCursor: String
 }
 
+"""A peer configured on a WireGuard remote-access VPN server."""
+type WireGuardPeer {
+  id: ID
+  name: String
+  serverId: String
+  interfaceIp: String
+  allowedIps: [String!]
+  publicKey: String
+  presharedKeyEnabled: Boolean
+}
+
+"""Paginated page of WireGuard VPN server peers."""
+type WireGuardPeerPage {
+  items: [WireGuardPeer!]!
+  nextCursor: String
+}
+
 """A UniFi WLAN/SSID configuration."""
 type Wlan {
   id: ID
@@ -2654,12 +2733,14 @@ Read-only access to UniFi Network resources.
 - `portStats: PortStats`  — Get the per-port stats wrapper for a switch (name/model + port_table).
 - `qosRule: QosRule`  — Look up a single QoS rule by id.
 - `qosRules: QosRulePage!`  — List QoS rules on the given controller/site (paginated).
+- `remoteVpnClients: RemoteVpnClientPage!`  — List remote-access VPN users with their live connection state (paginated). Connected users only unless includeOffline is true.
 - `rfScanResults: [RfScanResult!]!`  — List RF-scan results for a specific access point.
 - `rogueAps: RogueApPage!`  — List rogue (unknown) APs detected within a window (paginated).
 - `route: Route`  — Look up a single static route by id.
 - `routes: RoutePage!`  — List configured static routes (paginated).
 - `siteDpiTraffic: [StatPoint!]!`  — Site-wide DPI traffic breakdown.
 - `siteSettings: SiteSettings`  — Get site-level settings (locale, timezone, advanced).
+- `siteToSiteVpns: SiteToSiteVpnPage!`  — List site-to-site VPN tunnels (paginated).
 - `snmpSettings: SnmpSettings`  — Get SNMP settings.
 - `speedtestResults: SpeedtestResultPage!`  — List recent speedtest results (paginated).
 - `speedtestStatus: SpeedtestStatus`  — Get the gateway speedtest status (idle/running + last results).
@@ -2681,6 +2762,8 @@ Read-only access to UniFi Network resources.
 - `vpnClients: VpnClientPage!`  — List configured VPN clients (outbound tunnels) (paginated).
 - `vpnServer: VpnServer`  — Look up a single VPN server by id.
 - `vpnServers: VpnServerPage!`  — List configured VPN servers (inbound tunnels) (paginated).
+- `wireguardPeer: WireGuardPeer`  — Look up a single WireGuard VPN server peer by id.
+- `wireguardPeers: WireGuardPeerPage!`  — List peers configured on WireGuard remote-access VPN servers (paginated).
 - `wlan: Wlan`  — Look up a single WLAN/SSID by id.
 - `wlans: WlanPage!`  — List WLAN/SSID configurations on the given controller/site (paginated).
 

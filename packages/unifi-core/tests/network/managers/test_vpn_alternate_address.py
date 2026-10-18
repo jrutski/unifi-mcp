@@ -115,7 +115,7 @@ async def test_fresh_full_merge_preserves_secrets_and_never_logs_them(caplog):
     assert before == BASE
     assert SECRET not in repr(result.to_dict()) + caplog.text
     conn.get_cached.assert_not_called()
-    assert conn._invalidate_cache.call_count == 4
+    assert conn._invalidate_cache.call_count == 6  # one full VPN cache pass
 
 
 async def test_preview_reads_but_never_writes_and_disabling_retains_address():
@@ -231,7 +231,7 @@ async def test_write_failures_not_retried_and_classified_safely(error, applied, 
     result = await manager.update_vpn_server_alternate_address("srv", {"alternate_address_enabled": True})
     assert not result.success and result.mutation_applied is applied
     assert conn.request.await_count == 2
-    assert conn._invalidate_cache.call_count == 4
+    assert conn._invalidate_cache.call_count == 6  # one full VPN cache pass
     assert SECRET not in repr(result.to_dict()) + caplog.text
 
 

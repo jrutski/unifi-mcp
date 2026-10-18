@@ -57,3 +57,36 @@ def test_vpn_server_projection_drops_private_key() -> None:
     assert "x_wireguard_private_key" not in projected
     blob = " ".join(str(v) for v in projected.values())
     assert "TEST_FAKE_PRIVATE_KEY" not in blob
+
+
+def test_wireguard_peer_projection_drops_preshared_key() -> None:
+    from unifi_api.graphql.types.network.vpn import WireGuardPeer
+
+    raw = {
+        "_id": "peer-1",
+        "name": "Laptop",
+        "network_id": "s-1",
+        "interface_ip": "192.0.2.4",
+        "allowed_ips": [],
+        "public_key": "TEST_FAKE_PUBLIC_KEY_cccc=",
+        "preshared_key": "TEST_FAKE_PSK_dddd=",
+    }
+
+    projected = WireGuardPeer.from_manager_output(raw).to_dict()
+
+    assert "preshared_key" not in projected
+    assert "TEST_FAKE_PSK" not in repr(projected)
+    assert projected["preshared_key_enabled"] is True
+    assert projected["public_key"] == raw["public_key"]
+
+
+def test_remote_vpn_client_and_site_to_site_projections_match_core_models() -> None:
+    from unifi_api.graphql.types.network.vpn import RemoteVpnClient, SiteToSiteVpn
+    from unifi_core.network.models.vpn import RemoteVpnClient as CoreRemote
+    from unifi_core.network.models.vpn import SiteToSiteVpn as CoreSiteToSite
+
+    assert set(RemoteVpnClient.from_manager_output({}).to_dict()) == set(CoreRemote.model_fields)
+    assert set(SiteToSiteVpn.from_manager_output({}).to_dict()) == set(CoreSiteToSite.model_fields)
+
+    tunnel = SiteToSiteVpn.from_manager_output({"_id": "s", "x_ipsec_pre_shared_key": "TEST_FAKE_SECRET"}).to_dict()
+    assert "TEST_FAKE_SECRET" not in repr(tunnel)

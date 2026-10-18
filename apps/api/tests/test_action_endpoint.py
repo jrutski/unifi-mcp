@@ -1046,3 +1046,31 @@ async def test_action_endpoint_list_vouchers_shaped_uses_shared_view(tmp_path, m
     assert body["data"][0] == {"code": "1234567890", "note": "Guest voucher"}
     manager.get_vouchers.assert_awaited_once_with()
     await app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("redact", [True, False])
+async def test_action_endpoint_never_returns_wireguard_preshared_keys(tmp_path, monkeypatch, redact):
+    """The peer projection drops the key itself, so even a raw-secrets policy cannot surface it."""
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await _bootstrap(tmp_path, redact_sensitive_fields=redact)
+    peer = {"_id": "peer-1", "name": "Laptop", "network_id": "s-1", "preshared_key": "synthetic-psk"}
+    manager = MagicMock()
+    manager._connection.site = "default"
+    manager.get_wireguard_peers = AsyncMock(return_value=[peer])
+    factory = MagicMock()
+    factory.get_domain_manager = AsyncMock(return_value=manager)
+    app.state.manager_factory = factory
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/v1/actions/unifi_list_wireguard_peers",
+            headers={"Authorization": f"Bearer {key}"},
+            json={"site": "default", "controller": cid, "args": {"server_id": "s-1"}, "confirm": False},
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True
+    manager.get_wireguard_peers.assert_awaited_once_with(server_id="s-1")
+    assert "synthetic-psk" not in response.text
+    assert body["data"][0]["preshared_key_enabled"] is True
+    await app.state.engine.dispose()
