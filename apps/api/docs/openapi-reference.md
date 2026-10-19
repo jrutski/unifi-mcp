@@ -903,6 +903,7 @@ Get a NAT rule by its V2 NAT-family ID; port-forward and Integration API IDs are
 - `site_id` (path) (required)
 - `limit` (query)
 - `cursor` (query)
+- `action` (query)
 - `controller` (query)
 
 
@@ -1433,6 +1434,17 @@ LIST kind per Phase 4A — manager returns multi-element list of subsystems.
 
 
 ## network/threat_management
+
+### `GET /v1/sites/{site_id}/region-blocking` — Get Region Blocking
+
+
+**Parameters:**
+
+- `site_id` (path) (required)
+- `controller` (query)
+
+
+**Returns:** `Detail_RegionBlockingModel_`
 
 ### `GET /v1/sites/{site_id}/threat-management-settings` — Get Threat Management Settings
 

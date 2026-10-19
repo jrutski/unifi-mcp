@@ -1851,6 +1851,31 @@
         "title": "Detail[QosRuleModel]",
         "type": "object"
       },
+      "Detail_RegionBlockingModel_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RegionBlockingModel"
+          },
+          "render_hint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Hint"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "Detail[RegionBlockingModel]",
+        "type": "object"
+      },
       "Detail_RouteModel_": {
         "additionalProperties": true,
         "properties": {
@@ -8082,6 +8107,57 @@
         "title": "QosRuleModel",
         "type": "object"
       },
+      "RegionBlockingModel": {
+        "additionalProperties": true,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'block' drops traffic from the listed countries; 'allow' drops traffic from every other country.",
+            "title": "Action"
+          },
+          "countries": {
+            "description": "ISO 3166-1 alpha-2 country codes the action applies to.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Countries",
+            "type": "array"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether Region Blocking is enabled.",
+            "title": "Enabled"
+          },
+          "traffic_direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Traffic the rule applies to: 'both', 'ingress' or 'egress'.",
+            "title": "Traffic Direction"
+          }
+        },
+        "title": "RegionBlockingModel",
+        "type": "object"
+      },
       "RemoteVpnClientModel": {
         "additionalProperties": true,
         "properties": {
@@ -8975,6 +9051,30 @@
               }
             ],
             "title": "Network Name"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Transport port.",
+            "title": "Port"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Country code (internet endpoints).",
+            "title": "Region"
           },
           "zone_name": {
             "anyOf": [
@@ -17363,6 +17463,24 @@
             }
           },
           {
+            "description": "Only matches with this outcome: 'allowed' or 'blocked'",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only matches with this outcome: 'allowed' or 'blocked'",
+              "title": "Action"
+            }
+          },
+          {
             "description": "Controller UUID; omit to use default",
             "in": "query",
             "name": "controller",
@@ -20146,6 +20264,66 @@
         "summary": "Get Recording",
         "tags": [
           "protect/events"
+        ]
+      }
+    },
+    "/v1/sites/{site_id}/region-blocking": {
+      "get": {
+        "operationId": "get_region_blocking_v1_sites__site_id__region_blocking_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Controller UUID; omit to use default",
+            "in": "query",
+            "name": "controller",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Controller UUID; omit to use default",
+              "title": "Controller"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detail_RegionBlockingModel_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Region Blocking",
+        "tags": [
+          "network/threat_management"
         ]
       }
     },

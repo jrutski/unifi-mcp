@@ -12,7 +12,7 @@ from typing import Annotated, Any, Dict, List, Optional
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from unifi_core.network.models.traffic_flows import TrafficFlowQuery
+from unifi_core.network.models.traffic_flows import TrafficFlowQuery, traffic_flow_policy_filter
 from unifi_network_mcp.runtime import server, traffic_flow_manager
 
 logger = logging.getLogger(__name__)
@@ -22,14 +22,21 @@ def _as_list(value: Optional[str]) -> Optional[List[str]]:
     return [value] if value else None
 
 
+def _as_int_list(value: Optional[int]) -> Optional[List[int]]:
+    return [value] if value is not None else None
+
+
 @server.tool(
     name="unifi_get_traffic_flows",
     description=(
         "Query historical UniFi Traffic Flows (Insights > Flows). Returns completed flow "
-        "records — source/destination (incl. resolved destination domains), service, risk, "
-        "action, bytes, and timestamps — for a time window, with server-side filtering and "
-        "pagination. Supply both time_from and time_to (epoch ms) for an explicit window, or "
-        "use within_hours. Read-only; one page per call (use page/total_page_count to paginate)."
+        "records — source/destination (incl. resolved destination domains, ports and country "
+        "codes), service, risk, action, bytes, matched policies, and timestamps — for a time "
+        "window, with server-side filtering and pagination. Filter by what matched a flow with "
+        "policy_type (FIREWALL, PROTECTION, INTRUSION_PREVENTION for IPS signature matches) or "
+        "policy_internal_type='REGION_BLOCKING' for Region Blocking alone. Supply both time_from "
+        "and time_to (epoch ms) for an explicit window, or use within_hours. Read-only; one page "
+        "per call (use page/total_page_count to paginate)."
     ),
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
@@ -46,6 +53,19 @@ async def get_traffic_flows(
     destination_domain: Annotated[Optional[str], Field(description="Filter by destination domain")] = None,
     destination_ip: Annotated[Optional[str], Field(description="Filter by destination IP")] = None,
     destination_region: Annotated[Optional[str], Field(description="Filter by destination region/country")] = None,
+    source_region: Annotated[
+        Optional[str], Field(description="Filter by source country code (e.g. NL); useful for incoming traffic")
+    ] = None,
+    source_port: Annotated[Optional[int], Field(ge=0, le=65535, description="Filter by source port")] = None,
+    destination_port: Annotated[Optional[int], Field(ge=0, le=65535, description="Filter by destination port")] = None,
+    policy_type: Annotated[
+        Optional[str],
+        Field(description="Filter by matched policy type: FIREWALL, PROTECTION, INTRUSION_PREVENTION, ..."),
+    ] = None,
+    policy_internal_type: Annotated[
+        Optional[str],
+        Field(description="Filter by a specific matched policy: REGION_BLOCKING"),
+    ] = None,
     risk: Annotated[Optional[str], Field(description="Filter by risk (low/medium/high)")] = None,
     action: Annotated[Optional[str], Field(description="Filter by action (allowed/blocked)")] = None,
     service: Annotated[Optional[str], Field(description="Filter by service")] = None,
@@ -66,6 +86,7 @@ async def get_traffic_flows(
         time_to = now_ms
 
     try:
+        policy = traffic_flow_policy_filter(policy_internal_type)
         query = TrafficFlowQuery(
             time_from=time_from,
             time_to=time_to,
@@ -84,6 +105,11 @@ async def get_traffic_flows(
             destination_domain=_as_list(destination_domain),
             destination_ip=_as_list(destination_ip),
             destination_region=_as_list(destination_region),
+            source_region=_as_list(source_region),
+            source_port=_as_int_list(source_port),
+            destination_port=_as_int_list(destination_port),
+            policy_type=_as_list(policy_type),
+            policy=[policy] if policy is not None else None,
         )
         result = await traffic_flow_manager.get_traffic_flows(query)
         return {"success": True, "site": traffic_flow_manager._connection.site, **result}

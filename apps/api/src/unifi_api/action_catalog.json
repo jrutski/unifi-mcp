@@ -4535,12 +4535,16 @@
       "manager_method": "get_ips_events",
       "input_schema": {
         "properties": {
+          "action": {
+            "description": "Only matches with this outcome: 'allowed' or 'blocked'",
+            "type": "string"
+          },
           "duration": {
-            "description": "Time period: 'hourly' (1h, default), 'daily' (24h), 'weekly' (7d), or 'monthly' (30d)",
+            "description": "Time period: 'hourly' (1h), 'daily' (24h, default), 'weekly' (7d), or 'monthly' (30d)",
             "type": "string"
           },
           "limit": {
-            "description": "Maximum number of events to return (default 50)",
+            "description": "Maximum number of events to return (default 50, max 1000)",
             "type": "integer"
           }
         },
@@ -4828,6 +4832,21 @@
         "required": [
           "rule_id"
         ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unifi_get_region_blocking",
+      "product": "network",
+      "category": "system",
+      "permission_action": "read",
+      "read_only_hint": true,
+      "auth_method": "local_only",
+      "manager_attr": "system_manager",
+      "manager_method": "get_region_blocking",
+      "input_schema": {
+        "properties": {},
         "type": "object",
         "additionalProperties": false
       }
@@ -5137,6 +5156,12 @@
             "description": "Filter by destination IP",
             "type": "string"
           },
+          "destination_port": {
+            "description": "Filter by destination port",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
           "destination_region": {
             "description": "Filter by destination region/country",
             "type": "string"
@@ -5153,6 +5178,14 @@
           "page_size": {
             "description": "Rows per page (<=1000)",
             "type": "integer"
+          },
+          "policy_internal_type": {
+            "description": "Filter by a specific matched policy: REGION_BLOCKING",
+            "type": "string"
+          },
+          "policy_type": {
+            "description": "Filter by matched policy type: FIREWALL, PROTECTION, INTRUSION_PREVENTION, ...",
+            "type": "string"
           },
           "protocol": {
             "description": "Filter by protocol",
@@ -5184,6 +5217,16 @@
           },
           "source_network_id": {
             "description": "Filter by source network ID",
+            "type": "string"
+          },
+          "source_port": {
+            "description": "Filter by source port",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source_region": {
+            "description": "Filter by source country code (e.g. NL); useful for incoming traffic",
             "type": "string"
           },
           "time_from": {

@@ -133,6 +133,9 @@ from unifi_api.graphql.types.network.firewall import (
 from unifi_api.graphql.types.network.gateway_settings import (
     GatewaySettings as NetworkGatewaySettingsType,
 )
+from unifi_api.graphql.types.network.ips_event import (
+    IpsEvent as NetworkIpsEventType,
+)
 from unifi_api.graphql.types.network.mdns import MdnsSettings as NetworkMdnsSettingsType
 from unifi_api.graphql.types.network.nat import (
     NatRule as NetworkNatRuleType,
@@ -214,6 +217,9 @@ from unifi_api.graphql.types.network.system import (
 )
 from unifi_api.graphql.types.network.system import (
     TopClient as NetworkTopClientType,
+)
+from unifi_api.graphql.types.network.threat_management import (
+    RegionBlocking as NetworkRegionBlockingType,
 )
 from unifi_api.graphql.types.network.threat_management import (
     ThreatManagementSettings as NetworkThreatManagementSettingsType,
@@ -567,7 +573,7 @@ def build_type_registry() -> TypeRegistry:
     reg.register_tool_type("unifi_list_events", NetworkEventLogType, "event_log")
     reg.register_tool_type("unifi_get_alerts", NetworkEventLogType, "event_log")
     reg.register_tool_type("unifi_get_anomalies", NetworkEventLogType, "event_log")
-    reg.register_tool_type("unifi_get_ips_events", NetworkEventLogType, "event_log")
+    reg.register_tool_type("unifi_get_ips_events", NetworkIpsEventType, "event_log")
 
     # network/system (tool-keyed only — 9 read shapes + speedtest_results)
     reg.register_tool_type("unifi_list_alarms", NetworkAlarmType, "list")
@@ -586,6 +592,7 @@ def build_type_registry() -> TypeRegistry:
         NetworkThreatManagementSettingsType,
         "detail",
     )
+    reg.register_tool_type("unifi_get_region_blocking", NetworkRegionBlockingType, "detail")
     reg.register_tool_type("unifi_get_threat_posture", NetworkThreatPostureType, "detail")
     reg.register_tool_type("unifi_get_incident_evidence", IncidentEvidenceType, "detail")
     reg.register_tool_type("unifi_get_mgmt_settings", NetworkMgmtSettingsType, "detail")

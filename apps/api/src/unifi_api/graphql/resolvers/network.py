@@ -66,6 +66,12 @@ from unifi_api.graphql.types.network.firewall import (
     LegacyFirewallRule,
 )
 from unifi_api.graphql.types.network.gateway_settings import GatewaySettings
+from unifi_api.graphql.types.network.ips_event import (
+    IPS_EVENTS_FETCH_LIMIT,
+    IPS_EVENTS_WINDOW_HOURS,
+    IpsEvent,
+    IpsEventPage,
+)
 from unifi_api.graphql.types.network.mdns import MdnsSettings
 from unifi_api.graphql.types.network.nat import NatRule
 from unifi_api.graphql.types.network.network import Network
@@ -101,7 +107,7 @@ from unifi_api.graphql.types.network.system import (
     SystemInfo,
     TopClient,
 )
-from unifi_api.graphql.types.network.threat_management import ThreatManagementSettings
+from unifi_api.graphql.types.network.threat_management import RegionBlocking, ThreatManagementSettings
 from unifi_api.graphql.types.network.threat_posture import ThreatPosture
 from unifi_api.graphql.types.network.traffic_flow import (
     TrafficFlow,
@@ -1110,9 +1116,12 @@ async def _fetch_ips_events(
     ctx: GraphQLContext,
     controller: str,
     site: str,
+    action: str | None = None,
 ) -> list:
-    key = f"network/ips-events/{controller}/{site}"
-    return await _stats_mgr_fetch(ctx, controller, site, key, "get_ips_events")
+    key = f"network/ips-events/{controller}/{site}/{action}"
+    return await _stats_mgr_fetch(
+        ctx, controller, site, key, "get_ips_events", IPS_EVENTS_WINDOW_HOURS, IPS_EVENTS_FETCH_LIMIT, action
+    )
 
 
 async def _fetch_top_clients(
@@ -1329,6 +1338,11 @@ async def _fetch_mdns_settings(ctx: GraphQLContext, controller: str, site: str) 
 async def _fetch_threat_management_settings(ctx: GraphQLContext, controller: str, site: str) -> Any:
     key = f"network/threat-management-settings/{controller}/{site}"
     return await _system_mgr_fetch(ctx, controller, site, key, "get_threat_management_settings")
+
+
+async def _fetch_region_blocking(ctx: GraphQLContext, controller: str, site: str) -> Any:
+    key = f"network/region-blocking/{controller}/{site}"
+    return await _system_mgr_fetch(ctx, controller, site, key, "get_region_blocking")
 
 
 async def _fetch_threat_posture(ctx: GraphQLContext, controller: str, site: str, period: str) -> Any:
@@ -3653,7 +3667,10 @@ class NetworkQuery:
 
     @strawberry.field(
         permission_classes=[IsRead],
-        description="List recent IPS/IDS events (paginated).",
+        description=(
+            "List IPS/IDS signature matches from the last 24 hours, newest first (paginated). "
+            "Filter with action: 'allowed' or 'blocked'."
+        ),
     )
     async def ips_events(
         self,
@@ -3662,9 +3679,10 @@ class NetworkQuery:
         site: str = "default",
         limit: int = 50,
         cursor: str | None = None,
-    ) -> EventLogPage:
+        action: str | None = None,
+    ) -> IpsEventPage:
         ctx: GraphQLContext = info.context
-        raw = await _fetch_ips_events(ctx, controller, site)
+        raw = await _fetch_ips_events(ctx, controller, site, action)
 
         from unifi_api.services.pagination import paginate
 
@@ -3675,8 +3693,8 @@ class NetworkQuery:
             cursor=cursor_obj,
             key_fn=_event_key,
         )
-        return EventLogPage(
-            items=[EventLog.from_manager_output(e) for e in page],
+        return IpsEventPage(
+            items=[IpsEvent.from_manager_output(e) for e in page],
             next_cursor=next_cursor.encode() if next_cursor else None,
         )
 
@@ -3790,6 +3808,22 @@ class NetworkQuery:
         if raw is None:
             return None
         return ThreatManagementSettings.from_manager_output(raw, redact_sensitive=ctx.redact_sensitive_fields)
+
+    @strawberry.field(
+        permission_classes=[IsRead],
+        description="Get CyberSecure Region Blocking (GeoIP filtering) settings.",
+    )
+    async def region_blocking(
+        self,
+        info: Info,
+        controller: strawberry.ID,
+        site: str = "default",
+    ) -> RegionBlocking | None:
+        ctx: GraphQLContext = info.context
+        raw = await _fetch_region_blocking(ctx, controller, site)
+        if raw is None:
+            return None
+        return RegionBlocking.from_manager_output(raw)
 
     @strawberry.field(
         permission_classes=[IsRead],

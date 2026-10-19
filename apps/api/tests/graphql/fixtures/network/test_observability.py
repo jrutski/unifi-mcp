@@ -113,7 +113,14 @@ async def test_ips_events(tmp_path, monkeypatch):
         monkeypatch,
         {
             ("network", "stats_manager", "get_ips_events"): [
-                {"_id": "ips-1", "key": "IDS_THREAT", "msg": "Threat detected"},
+                {
+                    "id": "ips-1",
+                    "time": 1700000000000,
+                    "action": "allowed",
+                    "signature": "ET CINS Active Threat Intelligence Poor Reputation IP group 1",
+                    "category": "ciarmy",
+                    "destination": {"ip": "192.0.2.26", "port": 32400},
+                },
             ],
         },
     )
@@ -121,14 +128,23 @@ async def test_ips_events(tmp_path, monkeypatch):
         app,
         key,
         f'''{{
-        network {{ ipsEvents(controller: "{cid}", limit: 10) {{
-            items {{ id key }}
+        network {{ ipsEvents(controller: "{cid}", limit: 10, action: "allowed") {{
+            items {{ id action signature category destination {{ ip port }} recordSource }}
         }} }}
     }}''',
     )
     assert body.get("errors") is None, body
     items = body["data"]["network"]["ipsEvents"]["items"]
-    assert len(items) == 1
+    assert items == [
+        {
+            "id": "ips-1",
+            "action": "allowed",
+            "signature": "ET CINS Active Threat Intelligence Poor Reputation IP group 1",
+            "category": "ciarmy",
+            "destination": {"ip": "192.0.2.26", "port": 32400},
+            "recordSource": "traffic_flows",
+        }
+    ]
 
 
 @pytest.mark.asyncio

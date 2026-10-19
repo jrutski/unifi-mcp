@@ -11,8 +11,11 @@ from aiounifi.models.dpi_restriction_group import (
 
 from unifi_core.mac import mac_equal, normalize_mac
 from unifi_core.network.managers.client_manager import ClientManager  # Needed for get_top_clients
-from unifi_core.network.managers.connection_manager import ConnectionManager
+from unifi_core.network.managers.connection_manager import ConnectionManager, response_status
 from unifi_core.network.managers.device_manager import DeviceManager
+from unifi_core.network.managers.traffic_flow_manager import build_traffic_flow_body
+from unifi_core.network.models.ips_events import IPS_POLICY_TYPE, ips_event_from_flow, ips_event_from_legacy
+from unifi_core.network.models.traffic_flows import TrafficFlowQuery
 
 logger = logging.getLogger("unifi-network-mcp")
 
@@ -31,6 +34,10 @@ CACHE_PREFIX_STATS_SESSIONS = "stats_sessions"
 CACHE_PREFIX_STATS_DASHBOARD = "stats_dashboard"
 CACHE_PREFIX_STATS_ANOMALIES = "stats_anomalies"
 CACHE_PREFIX_STATS_CLIENT_WIFI = "stats_client_wifi"
+
+# IPS events
+_IPS_ACTIONS = ("allowed", "blocked")
+_IPS_MAX_LIMIT = 1000  # one traffic-flows page
 
 # Granularity validation
 VALID_GRANULARITIES = {"5minutes", "hourly", "daily", "monthly"}
@@ -538,84 +545,91 @@ class StatsManager:
             logger.error("Client DPI traffic read failed: %s", type(e).__name__)
             raise RequestError(f"Client DPI traffic read failed ({type(e).__name__}).") from None
 
-    async def get_ips_events(self, duration_hours: int = 24, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get IPS/IDS events.
+    async def get_ips_events(
+        self, duration_hours: int = 24, limit: int = 50, action: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get IPS/IDS signature matches, newest first.
+
+        Reads v2 traffic flows whose matched policy is INTRUSION_PREVENTION;
+        Network 10.x records every signature match there, with the signature,
+        category and endpoints, and leaves the legacy ``/stat/ips/event``
+        endpoint empty. Only a controller that answers the flows API with 404
+        falls back to that legacy endpoint; any other flow failure raises, so a
+        failed read is never reported as "no events".
 
         Args:
             duration_hours: Number of hours to look back.
-            limit: Maximum number of events to return.
+            limit: Maximum number of events to return (at most 1000).
+            action: Optional filter, 'allowed' or 'blocked'.
         """
-        cache_key = f"{CACHE_PREFIX_STATS_IPS}_{duration_hours}_{limit}_{self._connection.site}"
+        action = action.strip().lower() if isinstance(action, str) and action.strip() else None
+        if action not in (None, *_IPS_ACTIONS):
+            raise ValueError("action must be 'allowed' or 'blocked'")
+        limit = min(int(limit), _IPS_MAX_LIMIT)
+        if limit <= 0:
+            return []
+
+        cache_key = f"{CACHE_PREFIX_STATS_IPS}_{duration_hours}_{limit}_{action}_{self._connection.site}"
         cached_data = self._connection.get_cached(cache_key, timeout=300)  # 5 minute cache
         if cached_data is not None:
             return cached_data
 
+        end_time = int(datetime.now().timestamp() * 1000)
+        start_time = end_time - int(duration_hours * 3600 * 1000)
         try:
-            start_time = int((datetime.now() - timedelta(hours=duration_hours)).timestamp() * 1000)
-            end_time = int(datetime.now().timestamp() * 1000)
+            flows = await self._get_ips_flows(start_time, end_time, limit, action)
+            events = [ips_event_from_flow(flow) for flow in flows]
+        except Exception as flow_error:
+            if response_status(flow_error) != 404:
+                # Network 10.x serves flows and answers the legacy endpoint with an
+                # empty list, so falling back here would report a failed read as
+                # "no threats".
+                logger.error("Error getting IPS events from traffic flows: %s", type(flow_error).__name__)
+                raise RuntimeError("Failed to read IPS events from traffic flows") from None
+            logger.debug("Controller has no traffic-flows API; reading legacy /stat/ips/event")
+            try:
+                legacy = await self._get_legacy_ips_events(start_time, end_time, limit)
+            except Exception as legacy_error:
+                logger.error("Error getting legacy IPS events: %s", type(legacy_error).__name__)
+                raise RuntimeError("Failed to read IPS events from the legacy endpoint") from None
+            events = [ips_event_from_legacy(event) for event in legacy]
+            if action:
+                events = [event for event in events if event.action == action]
 
-            api_request = ApiRequest(
+        result = [event.model_dump(exclude_none=True) for event in events[:limit]]
+        self._connection._update_cache(cache_key, result, timeout=300)
+        return result
+
+    async def _get_ips_flows(self, start_time: int, end_time: int, limit: int, action: Optional[str]) -> List[Dict]:
+        """One page of IPS-matched traffic flows (raises when the flows API is unavailable)."""
+        query = TrafficFlowQuery(
+            time_from=start_time,
+            time_to=end_time,
+            page_size=limit,
+            policy_type=[IPS_POLICY_TYPE],
+            action=[action] if action else None,
+        )
+        response = await self._connection.request(
+            ApiRequestV2(method="post", path="/traffic-flows", data=build_traffic_flow_body(query))
+        )
+        # ApiRequestV2.decode list-wraps the envelope; see TrafficFlowManager.
+        if isinstance(response, list):
+            response = response[0] if response else {}
+        records = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(records, list):
+            raise RuntimeError("Unexpected traffic-flows response")
+        return [record for record in records if isinstance(record, dict)]
+
+    async def _get_legacy_ips_events(self, start_time: int, end_time: int, limit: int) -> List[Dict]:
+        """Legacy ``/stat/ips/event`` records for controllers without the flows API."""
+        response = await self._connection.request(
+            ApiRequest(
                 method="post",
                 path="/stat/ips/event",
-                data={
-                    "start": start_time,
-                    "end": end_time,
-                    "_limit": limit,
-                },
+                data={"start": start_time, "end": end_time, "_limit": limit},
             )
-            try:
-                response = await self._connection.request(api_request)
-            except Exception as legacy_error:
-                logger.debug("Legacy IPS endpoint failed, falling back to v2 security logs: %s", legacy_error)
-                response = await self._get_security_events_v2(start_time, end_time, limit)
-            else:
-                # A controller that has moved IPS events to the v2 system log answers
-                # this endpoint 200 with an empty list rather than failing, so the
-                # fallback above never fires on the versions it exists for.
-                if not isinstance(response, list) or not response:
-                    logger.debug("Legacy IPS endpoint returned no events, trying v2 security logs")
-                    try:
-                        response = await self._get_security_events_v2(start_time, end_time, limit)
-                    except Exception as v2_error:
-                        # Deliberately not raising, unlike the branch above: legacy did
-                        # answer here, and a controller old enough to have no v2 endpoint
-                        # answers exactly this way. Returning early leaves the result
-                        # uncached, so a transient v2 outage is retried on the next call
-                        # rather than held as "no threats" for the whole TTL.
-                        logger.debug("v2 security log fallback failed: %s", v2_error)
-                        return []
-            result = response if isinstance(response, list) else []
-            self._connection._update_cache(cache_key, result, timeout=300)
-            return result
-        except Exception as e:
-            logger.error("Error getting IPS events: %s", e)
-            raise
-
-    async def _get_security_events_v2(self, start_time: int, end_time: int, limit: int) -> List[Dict[str, Any]]:
-        """Fallback for controllers where legacy IPS events no longer exist."""
-        api_request = ApiRequestV2(
-            method="post",
-            path="/system-log/critical",
-            data={
-                "timestampFrom": start_time,
-                "timestampTo": end_time,
-                "severities": ["HIGH", "VERY_HIGH"],
-                "categories": ["SECURITY"],
-                "type": "GENERAL",
-                "pageNumber": 0,
-                "pageSize": min(limit, 100),
-                "searchText": "",
-            },
         )
-        response = await self._connection.request(api_request)
-        if isinstance(response, list) and response and isinstance(response[0], dict) and "data" in response[0]:
-            return response[0]["data"][:limit]
-        if isinstance(response, dict):
-            data = response.get("data", response.get("logs", []))
-            return data[:limit] if isinstance(data, list) else []
-        if isinstance(response, list):
-            return response[:limit]
-        return []
+        return [event for event in response if isinstance(event, dict)] if isinstance(response, list) else []
 
     async def get_client_sessions(
         self,

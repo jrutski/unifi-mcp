@@ -7,6 +7,17 @@ and device command methods (speedtest).
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiounifi.errors import ResponseError
+
+_IPS_FLOW = {
+    "id": "flow-1",
+    "time": 1700000000000,
+    "action": "blocked",
+    "ips": {"signature": "ET DROP Example", "signature_id": 2402000, "category_name": "dshield"},
+    "policies": [{"type": "INTRUSION_PREVENTION", "internal_type": "SIGNATURE"}],
+    "source": {"ip": "198.51.100.9", "port": 1196, "region": "BR"},
+    "destination": {"ip": "192.0.2.26", "port": 32400},
+}
 
 
 class TestStatsManagerEnhanced:
@@ -247,92 +258,116 @@ class TestStatsManagerEnhanced:
         assert api_request.data["macs"] == ["aa:bb:cc:dd:ee:ff"]
 
     @pytest.mark.asyncio
-    async def test_get_ips_events(self, stats_manager, mock_connection):
-        """Test get_ips_events uses /stat/ips/event."""
-        mock_connection.request.return_value = [{"event_type": "alert"}]
+    async def test_get_ips_events_reads_ips_traffic_flows(self, stats_manager, mock_connection):
+        """IPS matches come from v2 traffic flows filtered to INTRUSION_PREVENTION."""
+        mock_connection.request.return_value = [{"data": [_IPS_FLOW], "total_element_count": 1}]
 
-        await stats_manager.get_ips_events()
+        result = await stats_manager.get_ips_events(limit=10)
 
-        call_args = mock_connection.request.call_args
-        api_request = call_args[0][0]
-        assert api_request.path == "/stat/ips/event"
-        assert api_request.data["_limit"] == 50
-
-    @pytest.mark.asyncio
-    async def test_get_ips_events_custom_limit(self, stats_manager, mock_connection):
-        """Test get_ips_events with custom limit."""
-        mock_connection.request.return_value = []
-
-        await stats_manager.get_ips_events(limit=10)
-
-        # An empty legacy answer now triggers the v2 fallback, so the legacy
-        # request is the first call rather than the last one.
-        api_request = mock_connection.request.call_args_list[0][0][0]
-        assert api_request.path == "/stat/ips/event"
-        assert api_request.data["_limit"] == 10
-
-    @pytest.mark.asyncio
-    async def test_get_ips_events_empty_legacy_falls_back_to_v2(self, stats_manager, mock_connection):
-        """An empty legacy response must still reach the v2 security log.
-
-        Controllers that moved IPS events to the v2 system log answer
-        /stat/ips/event with 200 and an empty list rather than failing, so a
-        fallback guarded only by an exception never runs for them.
-        """
-        v2_events = [{"key": "EVT_IPS_IpsAlert"}]
-        mock_connection.request.side_effect = [[], v2_events]
-
-        result = await stats_manager.get_ips_events()
-
-        assert result == v2_events
-        assert mock_connection.request.call_count == 2
-        assert mock_connection.request.call_args_list[0][0][0].path == "/stat/ips/event"
-        assert mock_connection.request.call_args_list[1][0][0].path == "/system-log/critical"
-
-    @pytest.mark.asyncio
-    async def test_get_ips_events_non_empty_legacy_skips_v2(self, stats_manager, mock_connection):
-        """A controller still populating the legacy endpoint must not be double-queried."""
-        legacy_events = [{"event_type": "alert"}]
-        mock_connection.request.return_value = legacy_events
-
-        result = await stats_manager.get_ips_events()
-
-        assert result == legacy_events
+        api_request = mock_connection.request.call_args[0][0]
+        assert api_request.path == "/traffic-flows"
+        assert api_request.method == "post"
+        assert api_request.data["policy_type"] == ["INTRUSION_PREVENTION"]
+        assert api_request.data["action"] == []
+        assert api_request.data["pageSize"] == 10
+        window = api_request.data["timestampTo"] - api_request.data["timestampFrom"]
+        assert window == 24 * 3600 * 1000
+        assert result == [
+            {
+                "id": "flow-1",
+                "time": 1700000000000,
+                "action": "blocked",
+                "signature": "ET DROP Example",
+                "signature_id": 2402000,
+                "category": "dshield",
+                "source": {"ip": "198.51.100.9", "port": 1196, "region": "BR"},
+                "destination": {"ip": "192.0.2.26", "port": 32400},
+                "record_source": "traffic_flows",
+            }
+        ]
         assert mock_connection.request.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_get_ips_events_v2_failure_after_empty_legacy_returns_empty(self, stats_manager, mock_connection):
-        """A failing v2 fallback must not turn an empty result into an exception.
+    async def test_get_ips_events_action_filter_is_sent_server_side(self, stats_manager, mock_connection):
+        mock_connection.request.return_value = [{"data": []}]
 
-        A controller old enough to have no v2 endpoint answers exactly this way,
-        so raising here would break setups the legacy endpoint still serves.
-        """
-        mock_connection.request.side_effect = [[], Exception("v2 unavailable")]
+        assert await stats_manager.get_ips_events(action=" Blocked ") == []
 
-        result = await stats_manager.get_ips_events()
-
-        assert result == []
-        assert mock_connection.request.call_count == 2
+        assert mock_connection.request.call_args[0][0].data["action"] == ["blocked"]
 
     @pytest.mark.asyncio
-    async def test_get_ips_events_v2_failure_is_not_cached(self, stats_manager, mock_connection):
-        """A degraded empty result must not be cached as a confirmed quiet period."""
-        mock_connection.request.side_effect = [[], Exception("v2 unavailable")]
+    async def test_get_ips_events_rejects_unknown_action(self, stats_manager, mock_connection):
+        with pytest.raises(ValueError, match="allowed' or 'blocked"):
+            await stats_manager.get_ips_events(action="dropped")
+        mock_connection.request.assert_not_called()
 
-        await stats_manager.get_ips_events()
+    @pytest.mark.asyncio
+    async def test_get_ips_events_limit_is_capped_at_one_page(self, stats_manager, mock_connection):
+        mock_connection.request.return_value = [{"data": []}]
 
+        await stats_manager.get_ips_events(limit=5000)
+
+        assert mock_connection.request.call_args[0][0].data["pageSize"] == 1000
+
+    @pytest.mark.asyncio
+    async def test_get_ips_events_flow_failure_does_not_fall_back(self, stats_manager, mock_connection):
+        """A failed flow read on 10.x must not become an empty legacy answer ("no threats")."""
+        mock_connection.request.side_effect = [ResponseError("Call https://c/traffic-flows received 500 Error"), []]
+
+        with pytest.raises(RuntimeError, match="traffic flows"):
+            await stats_manager.get_ips_events()
+
+        assert mock_connection.request.call_count == 1
         mock_connection._update_cache.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_get_ips_events_non_list_legacy_falls_back_to_v2(self, stats_manager, mock_connection):
-        """A malformed legacy answer must reach v2 rather than be coerced to []."""
-        v2_events = [{"key": "EVT_IPS_IpsAlert"}]
-        mock_connection.request.side_effect = [{"unexpected": "envelope"}, v2_events]
+    async def test_get_ips_events_malformed_flow_response_raises(self, stats_manager, mock_connection):
+        mock_connection.request.return_value = [{"unexpected": "envelope"}]
 
-        result = await stats_manager.get_ips_events()
+        with pytest.raises(RuntimeError):
+            await stats_manager.get_ips_events()
 
-        assert result == v2_events
-        assert mock_connection.request.call_count == 2
+        assert mock_connection.request.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_get_ips_events_controller_without_flows_reads_legacy(self, stats_manager, mock_connection):
+        """A 404 from the flows API means an older controller; its legacy log is authoritative."""
+        legacy = [
+            {"_id": "l1", "time": 1, "inner_alert_action": "allowed", "inner_alert_signature": "ET A"},
+            {"_id": "l2", "time": 2, "inner_alert_action": "blocked", "inner_alert_signature": "ET B"},
+        ]
+        mock_connection.request.side_effect = [
+            ResponseError("Call https://c/traffic-flows received 404 Not Found"),
+            legacy,
+        ]
+
+        result = await stats_manager.get_ips_events(limit=10, action="blocked")
+
+        legacy_request = mock_connection.request.call_args_list[1][0][0]
+        assert legacy_request.path == "/stat/ips/event"
+        assert legacy_request.data["_limit"] == 10
+        assert [event["id"] for event in result] == ["l2"]
+        assert result[0]["record_source"] == "legacy_ips_events"
+
+    @pytest.mark.asyncio
+    async def test_get_ips_events_controller_without_flows_and_no_events_is_empty(self, stats_manager, mock_connection):
+        """On an older controller an empty legacy log is a real empty result, not an error."""
+        mock_connection.request.side_effect = [
+            ResponseError("Call https://c/traffic-flows received 404 Not Found"),
+            [],
+        ]
+
+        assert await stats_manager.get_ips_events() == []
+
+    @pytest.mark.asyncio
+    async def test_get_ips_events_failure_logs_only_exception_class(self, stats_manager, mock_connection, caplog):
+        mock_connection.request.side_effect = ConnectionError("controller said 198.51.100.9")
+
+        with pytest.raises(RuntimeError):
+            await stats_manager.get_ips_events()
+
+        assert "ConnectionError" in caplog.text
+        assert "198.51.100.9" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_get_client_sessions(self, stats_manager, mock_connection):

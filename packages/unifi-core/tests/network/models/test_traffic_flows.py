@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 from unifi_core.network.models.traffic_flows import (
+    TrafficFlowPolicyFilter,
     TrafficFlowQuery,
     traffic_flow_from_controller,
+    traffic_flow_policy_filter,
 )
 
 # package-local fixture: models -> network (parents[1]) -> fixtures/
@@ -46,7 +48,9 @@ def test_serializer_maps_core_and_traffic_data():
     assert flow.bytes_tx == 2310
     assert flow.flow_start_time == 1779742800000
     assert flow.time == 1779742801200
-    assert "region" not in flow.destination.model_dump()
+    assert flow.source.port == 51514
+    assert flow.destination.port == 443
+    assert flow.destination.region is None
 
 
 def test_endpoint_name_falls_back_to_host_name():
@@ -172,3 +176,30 @@ def test_statistics_skips_null_region_subentry():
 
     stats = traffic_flow_statistics_from_controller({"allowed_count_by_region_by_risk": {"US": {"low": 5}, "DE": None}})
     assert stats.allowed_count_by_region_by_risk == {"US": {"low": 5}}
+
+
+def test_endpoint_carries_country_code_and_ignores_non_integer_ports():
+    flow = traffic_flow_from_controller(
+        {
+            "source": {"ip": "198.51.100.7", "port": "1196", "region": "BR"},
+            "destination": {"ip": "192.0.2.26", "port": True},
+        }
+    )
+    assert flow.source.region == "BR"
+    assert flow.source.port is None
+    assert flow.destination.port is None
+
+
+def test_query_upper_cases_region_and_policy_type():
+    q = TrafficFlowQuery(time_from=1, time_to=2, source_region=[" nl "], policy_type=["protection"])
+    assert q.source_region == ["NL"]
+    assert q.policy_type == ["PROTECTION"]
+
+
+def test_policy_filter_absent_without_internal_type():
+    assert traffic_flow_policy_filter() is None
+    assert traffic_flow_policy_filter("  ") is None
+
+
+def test_policy_filter_upper_cases_internal_type():
+    assert traffic_flow_policy_filter(" region_blocking ") == TrafficFlowPolicyFilter(internal_type="REGION_BLOCKING")

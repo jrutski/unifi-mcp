@@ -1,11 +1,13 @@
 """Fixture e2e tests for network/threat_management resolver.
 
 # tool: unifi_get_threat_management_settings
+# tool: unifi_get_region_blocking
 """
 
 from __future__ import annotations
 
 import pytest
+from unifi_core.network.models.region_blocking import RegionBlocking
 from unifi_core.network.models.threat_management import ThreatManagementSettings
 
 from tests.graphql.fixtures._helpers import (
@@ -92,3 +94,31 @@ async def test_threat_management_settings_raw_dict_excludes_secrets(tmp_path, mo
     assert settings["trafficIdentificationEnabled"] is True
     assert settings["deviceFingerprintingEnabled"] is True
     assert SECRET_TOKEN not in str(body)
+
+
+@pytest.mark.asyncio
+async def test_region_blocking(tmp_path, monkeypatch):
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await bootstrap(tmp_path, product="network")
+    stub_managers(
+        monkeypatch,
+        {
+            ("network", "system_manager", "get_region_blocking"): RegionBlocking(
+                enabled=True, action="block", countries=["CN", "RU"], traffic_direction="both"
+            ),
+        },
+    )
+    body = await graphql_query(
+        app,
+        key,
+        f'''{{
+        network {{ regionBlocking(controller: "{cid}") {{ enabled action countries trafficDirection }} }}
+    }}''',
+    )
+    assert body.get("errors") is None, body
+    assert body["data"]["network"]["regionBlocking"] == {
+        "enabled": True,
+        "action": "block",
+        "countries": ["CN", "RU"],
+        "trafficDirection": "both",
+    }

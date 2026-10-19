@@ -1,4 +1,4 @@
-"""Public site-wide threat management (IDS/IPS) settings projection."""
+"""Public site-wide threat management (IDS/IPS) and Region Blocking projections."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from dataclasses import asdict
 from typing import Any
 
 import strawberry
+from unifi_core.network.models.region_blocking import RegionBlocking as CoreRegionBlocking
+from unifi_core.network.models.region_blocking import region_blocking_from_controller
 from unifi_core.network.models.threat_management import (
     ThreatManagementSettings as CoreThreatManagementSettings,
 )
@@ -86,6 +88,45 @@ class ThreatManagementSettings:
             traffic_identification_enabled=data.get("traffic_identification_enabled"),
             device_fingerprinting_enabled=data.get("device_fingerprinting_enabled"),
             advanced_filtering_preference=preference,
+        )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@strawberry.type(description="CyberSecure Region Blocking (GeoIP filtering) settings.")
+class RegionBlocking:
+    enabled: bool | None = strawberry.field(default=None, description="Whether Region Blocking is enabled.")
+    action: str | None = strawberry.field(
+        default=None,
+        description="'block' drops traffic from the listed countries; 'allow' drops traffic from every other country.",
+    )
+    countries: list[str] = strawberry.field(
+        default_factory=list, description="ISO 3166-1 alpha-2 country codes the action applies to."
+    )
+    traffic_direction: str | None = strawberry.field(
+        default=None, description="Traffic the rule applies to: 'both', 'ingress' or 'egress'."
+    )
+
+    @classmethod
+    def render_hint(cls, kind: str) -> dict:
+        return {"kind": kind}
+
+    @classmethod
+    def from_manager_output(cls, obj: Any) -> "RegionBlocking":
+        if isinstance(obj, CoreRegionBlocking):
+            core = obj
+        elif isinstance(obj, dict) and "ip_filtering" in obj:
+            core = region_blocking_from_controller(obj)
+        elif isinstance(obj, dict):
+            core = CoreRegionBlocking.model_validate(obj)
+        else:
+            core = CoreRegionBlocking()
+        return cls(
+            enabled=core.enabled,
+            action=core.action,
+            countries=list(core.countries),
+            traffic_direction=core.traffic_direction,
         )
 
     def to_dict(self) -> dict:

@@ -66,6 +66,38 @@ async def test_tool_maps_params_and_returns_success():
 
 
 @pytest.mark.asyncio
+async def test_tool_maps_region_blocking_and_port_filters():
+    with patch(_MANAGER_METHOD, new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = dict(_ENVELOPE)
+        out = await get_traffic_flows(
+            time_from=1,
+            time_to=2,
+            policy_internal_type="REGION_BLOCKING",
+            source_region="nl",
+            destination_port=32400,
+        )
+
+    assert out["success"] is True
+    query = mock_get.call_args.args[0]
+    assert [p.model_dump(exclude_none=True) for p in query.policy] == [{"internal_type": "REGION_BLOCKING"}]
+    assert query.source_region == ["NL"]
+    assert query.destination_port == [32400]
+    assert query.source_port is None
+    assert query.policy_type is None
+
+
+@pytest.mark.asyncio
+async def test_tool_policy_type_alone_is_a_type_filter_not_a_policy():
+    with patch(_MANAGER_METHOD, new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = dict(_ENVELOPE)
+        await get_traffic_flows(time_from=1, time_to=2, policy_type="intrusion_prevention")
+
+    query = mock_get.call_args.args[0]
+    assert query.policy_type == ["INTRUSION_PREVENTION"]
+    assert query.policy is None
+
+
+@pytest.mark.asyncio
 async def test_tool_rejects_half_specified_window():
     # XOR guard must reject either half alone, symmetrically.
     out_from = await get_traffic_flows(time_from=1000)  # time_to missing

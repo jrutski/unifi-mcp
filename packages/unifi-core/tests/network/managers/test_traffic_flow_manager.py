@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from unifi_core.network.managers.traffic_flow_manager import TrafficFlowManager
-from unifi_core.network.models.traffic_flows import TrafficFlowQuery
+from unifi_core.network.models.traffic_flows import TrafficFlowPolicyFilter, TrafficFlowQuery
 
 _EMPTY_RESPONSE = {
     "data": [],
@@ -268,3 +268,45 @@ async def test_statistics_handles_list_wrapped_and_empty():
         result = await mgr.get_traffic_flow_statistics(period="HOUR", top=10)
         assert isinstance(result["top_clients"], list)
         assert isinstance(result["allowed_count_by_risk"], dict)
+
+
+# ---------------------------------------------------------------------------
+# E. Policy, region and port filters
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_policy_region_and_port_filters_reach_request_body():
+    conn = _make_connection()
+    mgr = TrafficFlowManager(conn)
+    query = TrafficFlowQuery(
+        time_from=1,
+        time_to=2,
+        source_region=["NL"],
+        source_port=[1196],
+        destination_port=[32400],
+        policy_type=["PROTECTION"],
+        policy=[TrafficFlowPolicyFilter(internal_type="REGION_BLOCKING")],
+    )
+
+    await mgr.get_traffic_flows(query)
+
+    body = conn.request.call_args.args[0].data
+    assert body["source_region"] == ["NL"]
+    assert body["source_port"] == [1196]
+    assert body["destination_port"] == [32400]
+    assert body["policy_type"] == ["PROTECTION"]
+    # Policy entries are objects, not strings; the controller rejects a bare string.
+    assert body["policy"] == [{"internal_type": "REGION_BLOCKING"}]
+
+
+@pytest.mark.asyncio
+async def test_unused_filters_are_sent_as_empty_arrays():
+    conn = _make_connection()
+    mgr = TrafficFlowManager(conn)
+
+    await mgr.get_traffic_flows(TrafficFlowQuery(time_from=1, time_to=2))
+
+    body = conn.request.call_args.args[0].data
+    for field in ("policy", "policy_type", "source_region", "source_port", "destination_port"):
+        assert body[field] == []

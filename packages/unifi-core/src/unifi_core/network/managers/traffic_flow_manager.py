@@ -56,19 +56,20 @@ _FILTER_FIELDS = (
     "destination_domain",
     "destination_ip",
     "destination_region",
+    "source_region",
+    "source_port",
+    "destination_port",
+    "policy_type",
 )
 # Remaining array fields the endpoint expects present in the body; not exposed
-# as filters in v1, so always sent as empty arrays.
+# as filters, so always sent as empty arrays. ``policy`` is filled separately
+# because it holds objects, not scalars.
 _ALL_ARRAY_FIELDS = _FILTER_FIELDS + (
     "policy",
-    "policy_type",
-    "source_port",
     "source_domain",
     "source_zone_id",
-    "source_region",
     "destination_host",
     "destination_mac",
-    "destination_port",
     "destination_network_id",
     "destination_zone_id",
     "in_network_id",
@@ -76,6 +77,26 @@ _ALL_ARRAY_FIELDS = _FILTER_FIELDS + (
     "next_ai_query",
     "except_for",
 )
+
+
+def build_traffic_flow_body(query: TrafficFlowQuery) -> Dict[str, Any]:
+    """Build the v2 ``/traffic-flows`` request body for a query."""
+    if query.time_from is None or query.time_to is None:
+        raise ValueError("time_from and time_to are required")
+    body: Dict[str, Any] = {field: [] for field in _ALL_ARRAY_FIELDS}
+    for field in _FILTER_FIELDS:
+        value = getattr(query, field, None)
+        if value:
+            body[field] = list(value)
+    if query.policy:
+        body["policy"] = [p.model_dump(exclude_none=True) for p in query.policy]
+    body["timestampFrom"] = query.time_from
+    body["timestampTo"] = query.time_to
+    body["pageNumber"] = query.page_number
+    body["pageSize"] = query.page_size
+    body["search_text"] = query.search_text or ""
+    body["skip_count"] = False
+    return body
 
 
 class TrafficFlowManager:
@@ -86,20 +107,7 @@ class TrafficFlowManager:
         self._dpi_manager = dpi_manager
 
     def _build_body(self, query: TrafficFlowQuery) -> Dict[str, Any]:
-        if query.time_from is None or query.time_to is None:
-            raise ValueError("time_from and time_to are required")
-        body: Dict[str, Any] = {field: [] for field in _ALL_ARRAY_FIELDS}
-        for field in _FILTER_FIELDS:
-            value = getattr(query, field, None)
-            if value:
-                body[field] = list(value)
-        body["timestampFrom"] = query.time_from
-        body["timestampTo"] = query.time_to
-        body["pageNumber"] = query.page_number
-        body["pageSize"] = query.page_size
-        body["search_text"] = query.search_text or ""
-        body["skip_count"] = False
-        return body
+        return build_traffic_flow_body(query)
 
     async def get_traffic_flows(self, query: TrafficFlowQuery) -> Dict[str, Any]:
         """POST the query and return the full pagination envelope.

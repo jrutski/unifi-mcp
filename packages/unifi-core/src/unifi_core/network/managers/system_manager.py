@@ -15,6 +15,13 @@ from unifi_core.network.models.mdns import (
     mdns_to_controller_update,
     validate_mdns_service_selection,
 )
+from unifi_core.network.models.region_blocking import (
+    REGION_BLOCKING_SETTING_KEY,
+    RegionBlocking,
+    has_legacy_region_blocking,
+    region_blocking_from_controller,
+    region_blocking_from_legacy_usg,
+)
 from unifi_core.network.models.threat_management import (
     ThreatManagementSettings,
     ThreatManagementValidationError,
@@ -321,6 +328,26 @@ class SystemManager:
         except Exception as exc:
             logger.error("Failed to read threat management settings: %s", type(exc).__name__)
             raise RuntimeError("Failed to read threat management settings") from None
+
+    async def get_region_blocking(self) -> RegionBlocking:
+        """Read CyberSecure Region Blocking (GeoIP filtering).
+
+        Network 10.x stores it in the ``usg_geo`` setting. Older firmware kept
+        ``geo_ip_filtering_*`` fields on the ``usg`` setting, read as a fallback
+        when no ``usg_geo`` record exists.
+        """
+        try:
+            records = await self.get_settings(REGION_BLOCKING_SETTING_KEY)
+            record = next((r for r in records if isinstance(r, dict)), None)
+            if record is not None and isinstance(record.get("ip_filtering"), dict):
+                return region_blocking_from_controller(record)
+            legacy = next((r for r in await self.get_settings("usg") if isinstance(r, dict)), None)
+            if has_legacy_region_blocking(legacy):
+                return region_blocking_from_legacy_usg(legacy)
+        except Exception as exc:
+            logger.error("Failed to read region blocking settings: %s", type(exc).__name__)
+            raise RuntimeError("Failed to read region blocking settings") from None
+        raise RuntimeError("Region Blocking settings were not found on this controller")
 
     async def _fresh_threat_record(self, section: str) -> Dict[str, Any]:
         """Read a known singleton without trusting cached settings for a write."""

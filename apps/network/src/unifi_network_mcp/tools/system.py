@@ -197,6 +197,32 @@ async def get_threat_management_settings() -> Dict[str, Any]:
 
 
 @server.tool(
+    name="unifi_get_region_blocking",
+    auth="local_only",
+    description=(
+        "Get CyberSecure Region Blocking (GeoIP filtering): whether it is enabled, whether the listed "
+        "countries are blocked ('block') or are the only ones allowed ('allow'), the ISO country codes, "
+        "and the traffic direction ('both', 'ingress' or 'egress'). Requires Network session credentials. "
+        "To see what it blocked, use unifi_get_traffic_flows with policy_internal_type='REGION_BLOCKING'."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+)
+async def get_region_blocking() -> Dict[str, Any]:
+    """Get site-wide Region Blocking settings."""
+    try:
+        settings = await system_manager.get_region_blocking()
+        return {
+            "success": True,
+            "site": system_manager._connection.site,
+            "region_blocking": settings.model_dump(),
+        }
+    except Exception as exc:
+        logger.error("Failed to get region blocking settings: %s", type(exc).__name__)
+        message = str(exc) if type(exc) is RuntimeError else "Failed to get region blocking settings"
+        return {"success": False, "error": message}
+
+
+@server.tool(
     name="unifi_get_threat_posture",
     auth="local_only",
     description=(

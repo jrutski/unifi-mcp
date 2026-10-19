@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from unifi_api.auth.middleware import require_scope
 from unifi_api.auth.scopes import Scope
+from unifi_api.graphql.types.network.ips_event import IPS_EVENTS_FETCH_LIMIT, IPS_EVENTS_WINDOW_HOURS
 from unifi_api.routes.resources._common import (
     require_capability,
     resolve_controller,
@@ -261,6 +262,7 @@ async def get_ips_events(
     controller=Depends(resolve_controller),
     limit: int = Query(50, ge=1, le=500),
     cursor: str | None = Query(None),
+    action: str | None = Query(None, description="Only matches with this outcome: 'allowed' or 'blocked'"),
 ) -> dict:
     require_capability(controller, "network")
     factory = request.app.state.manager_factory
@@ -273,7 +275,10 @@ async def get_ips_events(
             "stats_manager",
             site=site_id,
         )
-        events = await mgr.get_ips_events()
+        try:
+            events = await mgr.get_ips_events(IPS_EVENTS_WINDOW_HOURS, IPS_EVENTS_FETCH_LIMIT, action)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     return _list_response(
         request,
         events,

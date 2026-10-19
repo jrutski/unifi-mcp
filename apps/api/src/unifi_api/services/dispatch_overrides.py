@@ -940,7 +940,7 @@ def _translate_traffic_flows(args: dict[str, Any]) -> tuple[tuple[Any, ...], dic
     """Build the Core TrafficFlowQuery used by the MCP wrapper."""
     import time
 
-    from unifi_core.network.models.traffic_flows import TrafficFlowQuery
+    from unifi_core.network.models.traffic_flows import TrafficFlowQuery, traffic_flow_policy_filter
 
     def as_list(value: Any) -> list[str] | None:
         if value is None:
@@ -948,6 +948,13 @@ def _translate_traffic_flows(args: dict[str, Any]) -> tuple[tuple[Any, ...], dic
         if isinstance(value, list):
             return [str(item) for item in value]
         return [str(value)]
+
+    def as_int_list(value: Any) -> list[int] | None:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return [int(item) for item in value]
+        return [int(value)]
 
     time_from = args.get("time_from")
     time_to = args.get("time_to")
@@ -960,6 +967,7 @@ def _translate_traffic_flows(args: dict[str, Any]) -> tuple[tuple[Any, ...], dic
         time_to = int(time.time() * 1000)
         time_from = time_to - within_hours * 3_600_000
 
+    policy = traffic_flow_policy_filter(args.get("policy_internal_type"))
     query = TrafficFlowQuery(
         time_from=time_from,
         time_to=time_to,
@@ -978,6 +986,11 @@ def _translate_traffic_flows(args: dict[str, Any]) -> tuple[tuple[Any, ...], dic
         destination_domain=as_list(args.get("destination_domain")),
         destination_ip=as_list(args.get("destination_ip")),
         destination_region=as_list(args.get("destination_region")),
+        source_region=as_list(args.get("source_region")),
+        source_port=as_int_list(args.get("source_port")),
+        destination_port=as_int_list(args.get("destination_port")),
+        policy_type=as_list(args.get("policy_type")),
+        policy=[policy] if policy is not None else None,
     )
     return (), {"query": query}
 
@@ -1927,7 +1940,9 @@ DISPATCH_ARG_TRANSLATORS: dict[str, ArgTranslatorSpec] = {
     "unifi_get_gateway_stats": _spec(
         lambda args: _translate_duration(args, default_hours=24), "duration_hours", "granularity"
     ),
-    "unifi_get_ips_events": _spec(lambda args: _translate_duration(args, default_hours=24), "duration_hours", "limit"),
+    "unifi_get_ips_events": _spec(
+        lambda args: _translate_duration(args, default_hours=24), "duration_hours", "limit", "action"
+    ),
     "unifi_recent_events": _spec(_rename_and_drop(rename={"mac_address": "mac"}), "event_type", "mac", "limit"),
     "unifi_get_network_details": _spec(_rename_and_drop(drop=frozenset({"include", "summary"})), "network_id"),
     "unifi_get_network_stats": _spec(

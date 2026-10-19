@@ -417,8 +417,21 @@ async def test_get_ips_events_event_log(tmp_path, monkeypatch) -> None:
     app, key, cid = await _bootstrap(tmp_path)
     _stub_connection(app, cid)
 
-    async def fake_get(self, duration_hours=24, limit=50):
-        return [{"_id": "i1", "time": 1700000000000, "key": "IPS", "msg": "blocked"}]
+    calls = []
+
+    async def fake_get(self, duration_hours=24, limit=50, action=None):
+        calls.append((duration_hours, limit, action))
+        return [
+            {
+                "id": "i1",
+                "time": 1700000000000,
+                "action": "blocked",
+                "signature": "ET DROP Example",
+                "signature_id": 2402000,
+                "source": {"ip": "198.51.100.9", "port": 1196, "region": "BR"},
+                "record_source": "traffic_flows",
+            }
+        ]
 
     from unifi_core.network.managers.stats_manager import StatsManager
 
@@ -426,11 +439,44 @@ async def test_get_ips_events_event_log(tmp_path, monkeypatch) -> None:
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.get(
-            f"/v1/sites/default/ips-events?controller={cid}",
+            f"/v1/sites/default/ips-events?controller={cid}&action=blocked",
             headers={"Authorization": f"Bearer {key}"},
         )
     assert r.status_code == 200, r.text
-    assert r.json()["render_hint"]["kind"] == "event_log"
+    body = r.json()
+    assert body["render_hint"]["kind"] == "event_log"
+    assert calls == [(24, 1000, "blocked")]
+    item = body["items"][0]
+    assert item["signature_id"] == 2402000
+    assert item["source"] == {
+        "ip": "198.51.100.9",
+        "port": 1196,
+        "region": "BR",
+        "name": None,
+        "mac": None,
+        "network_name": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_ips_events_rejects_unknown_action(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UNIFI_API_DB_KEY", "k")
+    app, key, cid = await _bootstrap(tmp_path)
+    _stub_connection(app, cid)
+
+    async def fake_get(self, duration_hours=24, limit=50, action=None):
+        raise ValueError("action must be 'allowed' or 'blocked'")
+
+    from unifi_core.network.managers.stats_manager import StatsManager
+
+    monkeypatch.setattr(StatsManager, "get_ips_events", fake_get)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get(
+            f"/v1/sites/default/ips-events?controller={cid}&action=dropped",
+            headers={"Authorization": f"Bearer {key}"},
+        )
+    assert r.status_code == 400
 
 
 # ---------- LIST ----------

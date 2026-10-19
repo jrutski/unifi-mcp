@@ -48,6 +48,8 @@ class TrafficFlowEndpoint:
     network_name: str | None
     zone_name: str | None
     domains: list[str]
+    port: int | None = strawberry.field(default=None, description="Transport port.")
+    region: str | None = strawberry.field(default=None, description="Country code (internet endpoints).")
 
     @classmethod
     def from_manager_output(cls, obj: Any) -> "TrafficFlowEndpoint":
@@ -58,6 +60,8 @@ class TrafficFlowEndpoint:
             network_name=_get(obj, "network_name"),
             zone_name=_get(obj, "zone_name"),
             domains=_get(obj, "domains", default=[]),
+            port=_get(obj, "port"),
+            region=_get(obj, "region"),
         )
 
 

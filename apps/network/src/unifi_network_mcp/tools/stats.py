@@ -451,34 +451,45 @@ async def get_client_dpi_traffic(
 @server.tool(
     name="unifi_get_ips_events",
     description=(
-        "Get IPS/IDS security events (intrusion detection/prevention alerts). "
-        "Note: on newer UniFi OS / Network Application versions, IPS events may not populate "
-        "this legacy endpoint. Check the controller's traffic flows for threat data instead."
+        "Get IPS/IDS signature matches (intrusion detection/prevention), newest first. Each event has "
+        "the action the gateway took ('allowed' or 'blocked'), the signature name and ID, threat category "
+        "(e.g. 'dshield', matching unifi_get_threat_management_settings categories), classification, rule "
+        "set, related CVE, and source/destination IP, port, country and client. 'allowed' means the "
+        "signature matched but traffic was not dropped (IDS mode, or before signatures finished loading). "
+        "Filter with action. Reads Traffic Flows on Network 10.x; older controllers use the legacy IPS "
+        "event log. The system-log alert for a detection is in unifi_list_events with categories=['SECURITY']."
     ),
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
 async def get_ips_events(
     duration: Annotated[
         str,
-        Field(description="Time period: 'hourly' (1h, default), 'daily' (24h), 'weekly' (7d), or 'monthly' (30d)"),
+        Field(description="Time period: 'hourly' (1h), 'daily' (24h, default), 'weekly' (7d), or 'monthly' (30d)"),
     ] = "daily",
-    limit: Annotated[int, Field(description="Maximum number of events to return (default 50)")] = 50,
+    limit: Annotated[int, Field(description="Maximum number of events to return (default 50, max 1000)")] = 50,
+    action: Annotated[
+        Optional[str], Field(description="Only matches with this outcome: 'allowed' or 'blocked'")
+    ] = None,
 ) -> Dict[str, Any]:
     """Implementation for getting IPS/IDS events."""
     try:
         duration_hours = {"hourly": 1, "daily": 24, "weekly": 168, "monthly": 720}.get(duration, 24)
-        events = await stats_manager.get_ips_events(duration_hours=duration_hours, limit=limit)
+        events = await stats_manager.get_ips_events(duration_hours=duration_hours, limit=limit, action=action)
         return {
             "success": True,
             "site": stats_manager._connection.site,
             "duration": duration,
             "limit": limit,
             "count": len(events),
+            "blocked_count": sum(1 for event in events if event.get("action") == "blocked"),
             "events": events,
         }
+    except (ValueError, RuntimeError) as e:
+        logger.error("Error getting IPS events: %s", type(e).__name__)
+        return {"success": False, "error": str(e)}
     except Exception as e:
-        logger.error("Error getting IPS events: %s", e, exc_info=True)
-        return {"success": False, "error": f"Failed to get IPS events: {e}"}
+        logger.error("Error getting IPS events: %s", type(e).__name__)
+        return {"success": False, "error": f"Failed to get IPS events ({type(e).__name__})"}
 
 
 @server.tool(

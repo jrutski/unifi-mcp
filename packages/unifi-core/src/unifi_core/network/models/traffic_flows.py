@@ -2,6 +2,8 @@
 
 Read-only. Contains:
 - ``TrafficFlowQuery``               — typed query input (maps to the v2 request body)
+- ``TrafficFlowPolicyFilter``        — one matched-policy filter object
+- ``traffic_flow_policy_filter``     — build a policy filter from tool inputs
 - ``TrafficFlowEndpoint``            — a source/destination endpoint in a flow
 - ``TrafficFlow``                    — a normalized flow record
 - ``traffic_flow_from_controller``   — raw → TrafficFlow factory
@@ -16,6 +18,20 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from unifi_core.mac import normalize_mac
+
+
+class TrafficFlowPolicyFilter(BaseModel):
+    """One entry of the request body's ``policy`` array.
+
+    The controller matches flows on a policy object rather than a string.
+    Verified on Network 10.6: ``{"internal_type": "REGION_BLOCKING"}`` selects
+    Region Blocking. Other internal types need more keys (``SIGNATURE`` needs
+    ``ips_category``, firewall policies need ``id``), and an IPS category
+    filter was accepted but matched nothing, so only the internal type is
+    exposed; use ``policy_type`` for IPS matches.
+    """
+
+    internal_type: str = Field(description="Policy internal type, e.g. REGION_BLOCKING")
 
 
 class TrafficFlowQuery(BaseModel):
@@ -42,6 +58,13 @@ class TrafficFlowQuery(BaseModel):
     destination_domain: Optional[list[str]] = Field(default=None, description="Filter by destination domain")
     destination_ip: Optional[list[str]] = Field(default=None, description="Filter by destination IP")
     destination_region: Optional[list[str]] = Field(default=None, description="Filter by destination region")
+    source_region: Optional[list[str]] = Field(default=None, description="Filter by source region (country code)")
+    source_port: Optional[list[int]] = Field(default=None, description="Filter by source port")
+    destination_port: Optional[list[int]] = Field(default=None, description="Filter by destination port")
+    policy_type: Optional[list[str]] = Field(
+        default=None, description="Filter by matched policy type (e.g. FIREWALL, PROTECTION, INTRUSION_PREVENTION)"
+    )
+    policy: Optional[list[TrafficFlowPolicyFilter]] = Field(default=None, description="Filter by matched policy")
 
     @field_validator("source_mac")
     @classmethod
@@ -54,6 +77,20 @@ class TrafficFlowQuery(BaseModel):
         if v is None:
             return None
         return [normalize_mac(m) or m for m in v]
+
+    @field_validator("source_region", "policy_type")
+    @classmethod
+    def _upper_codes(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """Country codes and policy types are upper-case controller enums."""
+        if v is None:
+            return None
+        return [item.strip().upper() for item in v]
+
+
+def traffic_flow_policy_filter(internal_type: Optional[str] = None) -> Optional[TrafficFlowPolicyFilter]:
+    """Build a ``policy`` filter, or None when no internal type is given."""
+    internal = (internal_type or "").strip().upper()
+    return TrafficFlowPolicyFilter(internal_type=internal) if internal else None
 
 
 def _get(obj: Any, key: str, default: Any = None) -> Any:
@@ -81,6 +118,10 @@ class TrafficFlowEndpoint(BaseModel):
     )
     domains: list[str] = Field(
         default_factory=list, description="Resolved domains (destination)", json_schema_extra={"mutable": False}
+    )
+    port: Optional[int] = Field(default=None, description="Transport port", json_schema_extra={"mutable": False})
+    region: Optional[str] = Field(
+        default=None, description="Country code (internet endpoints)", json_schema_extra={"mutable": False}
     )
 
 
@@ -128,6 +169,7 @@ class TrafficFlow(BaseModel):
 
 def _endpoint_from_controller(raw: Any) -> TrafficFlowEndpoint:
     name = _get(raw, "client_name") or _get(raw, "host_name")
+    port = _get(raw, "port")
     return TrafficFlowEndpoint(
         name=name or None,
         mac=_get(raw, "mac") or None,
@@ -135,6 +177,8 @@ def _endpoint_from_controller(raw: Any) -> TrafficFlowEndpoint:
         network_name=_get(raw, "network_name") or None,
         zone_name=_get(raw, "zone_name") or None,
         domains=list(_get(raw, "domains", []) or []),
+        port=port if isinstance(port, int) and not isinstance(port, bool) else None,
+        region=_get(raw, "region") or None,
     )
 
 

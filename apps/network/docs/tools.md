@@ -1,6 +1,6 @@
 # Tool Catalog
 
-The UniFi Network MCP server exposes 214 tools, all prefixed with `unifi_`. Read-only tools are always available. Mutating tools are controlled by the [permission system](permissions.md).
+The UniFi Network MCP server exposes 215 tools, all prefixed with `unifi_`. Read-only tools are always available. Mutating tools are controlled by the [permission system](permissions.md).
 
 Standard MCP clients should use `tools/list` for currently registered tools. For compact manifest-backed metadata in lazy workflows, call the `unifi_tool_index` compatibility meta-tool at runtime, or inspect `src/unifi_network_mcp/tools_manifest.json`. In `meta_only` mode, the index initially contains only meta-tools; executing a known domain tool lazily registers its module, so later index results can include those loaded tools.
 
@@ -82,6 +82,12 @@ Returns current intrusion detection/prevention configuration and traffic identif
 
 This tool is read-only. Controller secrets (such as `utm_token`) and unverified fields are excluded.
 
+## Region Blocking (1 tool)
+
+- `unifi_get_region_blocking` — Read CyberSecure Region Blocking (GeoIP filtering)
+
+Returns `enabled`, `action` (`block` drops traffic from the listed countries; `allow` drops traffic from every other country), `countries` (ISO country codes) and `traffic_direction` (`both`, `ingress` or `egress`). Network 10.x stores this in the `usg_geo` setting; on older firmware the tool falls back to the `geo_ip_filtering_*` fields of the gateway settings. To see what Region Blocking dropped, call `unifi_get_traffic_flows` with `policy_internal_type="REGION_BLOCKING"`.
+
 ## OON Policies (6 tools)
 
 - `unifi_list_oon_policies` — List OON policies with schedule and targeting summary
@@ -126,7 +132,9 @@ This tool is read-only. Controller secrets (such as `utm_token`) and unverified 
 
 ## Traffic Flows (1 tool)
 
-- `unifi_get_traffic_flows` — Query historical UniFi Traffic Flows from Insights > Flows, with pagination and filters for time range, client, host, port, protocol, application, and direction
+- `unifi_get_traffic_flows` — Query historical UniFi Traffic Flows from Insights > Flows, with pagination and filters for time range, client, host, port, protocol, application, direction, source country, and the policy that matched a flow
+
+Each flow endpoint includes its port and, for internet endpoints, a country code. To filter by what matched a flow, use `policy_type` (`FIREWALL`, `PROTECTION`, or `INTRUSION_PREVENTION` for IPS signature matches), or `policy_internal_type="REGION_BLOCKING"` for Region Blocking alone.
 
 ## Port Forwarding (7 tools)
 

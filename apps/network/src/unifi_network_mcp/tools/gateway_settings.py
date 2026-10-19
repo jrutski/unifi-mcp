@@ -80,10 +80,11 @@ SECURITY_SENSITIVE_FIELDS: frozenset[str] = frozenset(
 
 @server.tool(
     name="unifi_get_gateway_settings",
-    description="Get the gateway (USG) settings: security (GeoIP filtering, SYN cookies, ICMP "
-    "redirects, DNS verification), NAT/UPnP (UPnP, NAT-PMP, MSS clamp), connection-tracking ALG "
-    "modules (FTP/GRE/H.323/PPTP/SIP/TFTP), hardware offloading, and conntrack timeouts. "
-    "Read-only; use unifi_update_gateway_settings to change values.",
+    description="Get the gateway (USG) settings: security (GeoIP filtering on older firmware, SYN "
+    "cookies, ICMP redirects, DNS verification), NAT/UPnP (UPnP, NAT-PMP, MSS clamp), "
+    "connection-tracking ALG modules (FTP/GRE/H.323/PPTP/SIP/TFTP), hardware offloading, and "
+    "conntrack timeouts. Network 10.x keeps GeoIP filtering in a separate Region Blocking setting; "
+    "use unifi_get_region_blocking for it. Read-only; use unifi_update_gateway_settings to change values.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
 async def get_gateway_settings() -> Dict[str, Any]:
@@ -112,7 +113,8 @@ async def get_gateway_settings() -> Dict[str, Any]:
     "values (including nested sub-objects) are automatically preserved via deep-merge. "
     "Security: geo_ip_filtering_enabled (bool), geo_ip_filtering_block ('block'/'allow'), "
     "geo_ip_filtering_countries (CSV ISO codes), geo_ip_filtering_traffic_direction "
-    "('both'/'ingress'/'egress'), syn_cookies (bool), broadcast_ping (bool), receive_redirects (bool), "
+    "('both'/'ingress'/'egress') — these GeoIP fields are for older firmware; Network 10.x keeps "
+    "Region Blocking in a separate setting (see unifi_get_region_blocking). syn_cookies (bool), broadcast_ping (bool), receive_redirects (bool), "
     "send_redirects (bool), dns_verification (object). "
     "NAT/UPnP: upnp_enabled (bool), upnp_nat_pmp_enabled (bool), upnp_secure_mode (bool), "
     "upnp_wan_interface (str), mss_clamp ('auto'/'custom'/'disabled'). "

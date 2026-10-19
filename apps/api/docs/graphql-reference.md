@@ -957,6 +957,55 @@ type IncidentEvidence {
   document: JSON!
 }
 
+"""One side of an IPS signature match."""
+type IpsEndpoint {
+  ip: String
+  port: Int
+
+  """Country code (internet endpoints)."""
+  region: String
+  name: String
+  mac: String
+  networkName: String
+}
+
+"""An IPS/IDS signature match."""
+type IpsEvent {
+  id: ID
+
+  """Match time (epoch ms)."""
+  time: Int
+
+  """'allowed' or 'blocked'."""
+  action: String
+  risk: String
+  direction: String
+  protocol: String
+  signature: String
+
+  """Signature ID (SID)."""
+  signatureId: Int
+
+  """Threat category code, e.g. 'dshield'."""
+  category: String
+  classification: String
+  ruleSet: String
+  cve: String
+  potentialRisk: String
+  count: Int
+  source: IpsEndpoint!
+  destination: IpsEndpoint!
+
+  """'traffic_flows' or 'legacy_ips_events'."""
+  recordSource: String
+}
+
+"""Paginated page of IPS signature matches."""
+type IpsEventPage {
+  items: [IpsEvent!]!
+  nextCursor: String
+}
+
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
 """
@@ -1521,8 +1570,10 @@ type NetworkQuery {
   """List recent anomalies (paginated)."""
   anomalies(controller: ID!, site: String! = "default", limit: Int! = 50, cursor: String = null): EventLogPage!
 
-  """List recent IPS/IDS events (paginated)."""
-  ipsEvents(controller: ID!, site: String! = "default", limit: Int! = 50, cursor: String = null): EventLogPage!
+  """
+  List IPS/IDS signature matches from the last 24 hours, newest first (paginated). Filter with action: 'allowed' or 'blocked'.
+  """
+  ipsEvents(controller: ID!, site: String! = "default", limit: Int! = 50, cursor: String = null, action: String = null): IpsEventPage!
 
   """List controller alarms (paginated)."""
   alarms(controller: ID!, site: String! = "default", limit: Int! = 50, cursor: String = null): AlarmPage!
@@ -1543,6 +1594,9 @@ type NetworkQuery {
   Get site-wide threat management (IDS/IPS) and traffic identification settings.
   """
   threatManagementSettings(controller: ID!, site: String! = "default"): ThreatManagementSettings
+
+  """Get CyberSecure Region Blocking (GeoIP filtering) settings."""
+  regionBlocking(controller: ID!, site: String! = "default"): RegionBlocking
 
   """
   Get CyberSecure threat posture for HOUR, DAY, WEEK, or MONTH using a Network session.
@@ -1989,6 +2043,23 @@ type RecordingStatusList {
   count: Int
 }
 
+"""CyberSecure Region Blocking (GeoIP filtering) settings."""
+type RegionBlocking {
+  """Whether Region Blocking is enabled."""
+  enabled: Boolean
+
+  """
+  'block' drops traffic from the listed countries; 'allow' drops traffic from every other country.
+  """
+  action: String
+
+  """ISO 3166-1 alpha-2 country codes the action applies to."""
+  countries: [String!]!
+
+  """Traffic the rule applies to: 'both', 'ingress' or 'egress'."""
+  trafficDirection: String
+}
+
 """A remote-access VPN user and its live connection state."""
 type RemoteVpnClient {
   id: ID
@@ -2327,6 +2398,12 @@ type TrafficFlowEndpoint {
   networkName: String
   zoneName: String
   domains: [String!]!
+
+  """Transport port."""
+  port: Int
+
+  """Country code (internet endpoints)."""
+  region: String
 }
 
 """Paginated page of UniFi traffic flows."""
@@ -2712,7 +2789,7 @@ Read-only access to UniFi Network resources.
 - `gatewaySettings: GatewaySettings`  — Get gateway (USG) security / NAT / connection-tracking settings.
 - `gatewayStats: [StatPoint!]!`  — Gateway stats timeseries.
 - `incidentEvidence: IncidentEvidence!`  — Collect bounded, read-only Network event evidence for one incident window as a unifi-incident-evidence-view (coverage plus bounded record citations), or with detail full the whole unifi-incident-evidence document. Stops at the first spent budget and says so; check coverage_complete before treating an empty result as an all-clear. Not cached.
-- `ipsEvents: EventLogPage!`  — List recent IPS/IDS events (paginated).
+- `ipsEvents: IpsEventPage!`  — List IPS/IDS signature matches from the last 24 hours, newest first (paginated). Filter with action: 'allowed' or 'blocked'.
 - `legacyFirewallRules: [LegacyFirewallRule!]!`  — List legacy (pre-zone-based) firewall rules. Sites still running the legacy engine return no zone-based policies or zones, so an empty firewallPolicies result does not mean no firewall rules are configured — check here as well.
 - `lldpNeighbors: LldpNeighbors`  — Get LLDP neighbors reported by a switch.
 - `mdnsSettings: MdnsSettings`  — Get site-wide mDNS service settings and read-only network scope.
@@ -2733,6 +2810,7 @@ Read-only access to UniFi Network resources.
 - `portStats: PortStats`  — Get the per-port stats wrapper for a switch (name/model + port_table).
 - `qosRule: QosRule`  — Look up a single QoS rule by id.
 - `qosRules: QosRulePage!`  — List QoS rules on the given controller/site (paginated).
+- `regionBlocking: RegionBlocking`  — Get CyberSecure Region Blocking (GeoIP filtering) settings.
 - `remoteVpnClients: RemoteVpnClientPage!`  — List remote-access VPN users with their live connection state (paginated). Connected users only unless includeOffline is true.
 - `rfScanResults: [RfScanResult!]!`  — List RF-scan results for a specific access point.
 - `rogueAps: RogueApPage!`  — List rogue (unknown) APs detected within a window (paginated).
